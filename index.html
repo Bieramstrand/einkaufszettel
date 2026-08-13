@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#16231c">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Zettel">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" href="./icon-192.png">
+<title>Einkaufszettel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#16231c;
+    --surface:#1e3327;
+    --surface2:#24402f;
+    --line:#31503b;
+    --accent:#e7a94c;
+    --accent2:#c2542b;
+    --text:#f3efe1;
+    --muted:#93a794;
+    --radius:16px;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);}
+  body{
+    font-family:'Karla', sans-serif;
+    padding-bottom:calc(48px + env(safe-area-inset-bottom, 10px));
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 20% 0%, rgba(231,169,76,0.08), transparent 45%),
+      radial-gradient(circle at 90% 10%, rgba(194,84,43,0.07), transparent 40%),
+      var(--bg);
+  }
+  h1,h2,h3{font-family:'Fraunces', serif; margin:0;}
+  .wrap{max-width:640px; margin:0 auto; padding:0 16px;}
+  .hidden{display:none !important;}
+
+  /* ---------- Header (shared) ---------- */
+  header.top{
+    position:sticky; top:0; z-index:20;
+    background:linear-gradient(var(--bg) 82%, transparent);
+    padding:calc(18px + env(safe-area-inset-top, 24px)) 0 10px;
+  }
+  header.top .row{display:flex; align-items:center; justify-content:space-between; padding:0 16px; gap:10px;}
+  header.top h1{font-size:28px; font-weight:700; letter-spacing:0.2px; display:flex; align-items:center; gap:10px;}
+  header.top h1 span.accentword{color:var(--accent);}
+  .count{font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--muted); flex-shrink:0;}
+  .backbtn{
+    background:var(--surface); border:1px solid var(--line); color:var(--text);
+    width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:18px; cursor:pointer; flex-shrink:0;
+  }
+  .editbtn{
+    background:transparent; border:1px solid var(--line); color:var(--muted);
+    font-family:'Karla', sans-serif; font-weight:600; font-size:13px;
+    padding:8px 14px; border-radius:16px; cursor:pointer;
+  }
+  .editbtn.on{color:var(--accent2); border-color:var(--accent2);}
+  .syncstatus{
+    display:none; align-items:center; gap:6px; font-family:'IBM Plex Mono', monospace;
+    font-size:11.5px; color:var(--accent2); flex-shrink:0;
+  }
+  .syncstatus.show{display:flex;}
+  .syncstatus .pulse{
+    width:7px; height:7px; border-radius:50%; background:var(--accent2);
+    animation:pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:0.35;}}
+
+  /* ---------- Overview: list of lists ---------- */
+  .liststack{display:flex; flex-direction:column; gap:14px; padding:6px 16px 40px;}
+  .listcard{
+    border-radius:22px; padding:22px 20px; position:relative; overflow:hidden;
+    cursor:pointer; min-height:100px; border:1px solid rgba(255,255,255,0.07);
+  }
+  .listcard .top{display:flex; justify-content:space-between; align-items:flex-start; position:relative; z-index:2;}
+  .listcard h3{font-size:23px; font-weight:600; color:var(--text);}
+  .listcard .badge{
+    background:rgba(0,0,0,0.3); color:var(--text); font-family:'IBM Plex Mono', monospace;
+    font-size:12px; padding:4px 10px; border-radius:14px; white-space:nowrap; flex-shrink:0;
+  }
+  .listcard .icon-big{position:absolute; right:10px; bottom:-6px; font-size:52px; opacity:0.28; z-index:1;}
+  .listcard .del{
+    position:absolute; top:12px; left:12px; background:var(--accent2); color:#fff;
+    width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:15px; z-index:3; border:0; cursor:pointer;
+  }
+  .listcard.editing{padding-left:46px;}
+  .listcard .sub{font-family:'Karla',sans-serif; font-size:12.5px; color:rgba(243,239,225,0.65); margin-top:4px; position:relative; z-index:2;}
+
+  .addlistcard{
+    border:2px dashed var(--line); border-radius:22px; padding:20px;
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    color:var(--muted); cursor:pointer; font-family:'Karla',sans-serif; font-weight:600; font-size:15px;
+  }
+  .newlistform{
+    display:flex; gap:8px; margin-top:2px;
+  }
+  .newlistform input{
+    flex:1; background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    color:var(--text); font-family:'Karla',sans-serif; font-size:16px; padding:12px 14px; outline:0;
+  }
+  .newlistform button{
+    background:var(--accent); color:#1b2b1f; border:0; border-radius:14px; padding:0 18px;
+    font-family:'Karla',sans-serif; font-weight:700; cursor:pointer;
+  }
+
+  /* ---------- Detail screen ---------- */
+  .searchbar{padding:10px 16px 0;}
+  .searchbox{
+    position:relative; display:flex; align-items:center;
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:4px 4px 4px 14px;
+  }
+  .searchbox input{
+    flex:1; background:transparent; border:0; outline:0; color:var(--text);
+    font-family:'Karla', sans-serif; font-size:16px; padding:10px 6px;
+  }
+  .searchbox input::placeholder{color:var(--muted);}
+  .searchbox button{
+    background:var(--accent); color:#1b2b1f; border:0; border-radius:10px;
+    font-family:'Karla', sans-serif; font-weight:700; font-size:14px;
+    padding:10px 14px; cursor:pointer;
+  }
+  .suggestions{
+    background:var(--surface); border:1px solid var(--line); border-top:0;
+    border-radius:0 0 14px 14px; overflow:hidden; margin:-1px 16px 0;
+  }
+  .suggestion{
+    display:flex; align-items:center; gap:10px; padding:11px 14px;
+    border-top:1px solid var(--line); cursor:pointer; font-size:15px;
+  }
+  .suggestion:active{background:var(--surface2);}
+  .suggestion .cat{margin-left:auto; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--muted);}
+  .suggestion.add-new{color:var(--accent);}
+
+  section{padding:18px 16px 0;}
+  .section-title{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .section-title h2{font-size:15px; text-transform:uppercase; letter-spacing:1.5px; color:var(--muted); font-weight:600; font-family:'Karla',sans-serif;}
+  .section-title .line{flex:1; height:1px; background:var(--line);}
+
+  .cat-group{margin-bottom:18px;}
+  .cat-label{
+    font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--muted);
+    margin:0 0 6px 2px; display:flex; align-items:center; gap:6px;
+  }
+  .list-items{list-style:none; margin:0; padding:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--line);}
+  .list-item{
+    display:flex; align-items:center; gap:12px;
+    background:var(--surface); padding:13px 12px; border-bottom:1px solid var(--line);
+  }
+  .list-item:last-child{border-bottom:0;}
+  .list-item .dot{
+    width:22px; height:22px; border-radius:50%; border:2px solid var(--accent);
+    flex-shrink:0; position:relative; cursor:pointer;
+  }
+  .list-item.done .dot{background:var(--accent); border-color:var(--accent);}
+  .list-item.done .dot::after{
+    content:"✓"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:13px; color:#1b2b1f; font-weight:700;
+  }
+  .list-item .icon{font-size:19px; width:22px; text-align:center; flex-shrink:0;}
+  .list-item .name{flex:1; font-size:16px; position:relative; cursor:pointer;}
+  .list-item.done .name{color:var(--muted);}
+  .list-item .strike{
+    position:absolute; left:-2px; right:-2px; top:50%; height:2px;
+    background:var(--accent2); transform:scaleX(0); transform-origin:left;
+    transition:transform 0.32s cubic-bezier(.6,0,.2,1); border-radius:2px;
+    box-shadow:0 3px 0 -1px rgba(194,84,43,0.35);
+  }
+  .list-item.done .strike{transform:scaleX(1) rotate(-0.6deg);}
+  .qty{
+    font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--accent);
+    background:rgba(231,169,76,0.12); border:1px solid rgba(231,169,76,0.35);
+    border-radius:20px; padding:3px 9px; cursor:pointer; flex-shrink:0;
+  }
+  .remove{
+    background:transparent; border:0; color:var(--muted); font-size:18px; line-height:1;
+    padding:4px 2px; cursor:pointer; flex-shrink:0;
+  }
+
+  .empty{
+    color:var(--muted); font-size:14px; padding:18px 4px; text-align:center;
+    border:1px dashed var(--line); border-radius:var(--radius);
+  }
+
+  .clear-btn{
+    display:block; margin:10px auto 0; background:transparent; color:var(--muted);
+    border:1px solid var(--line); border-radius:20px; padding:7px 16px; font-size:13px;
+    font-family:'Karla', sans-serif; cursor:pointer;
+  }
+
+  .chips{display:flex; gap:8px; overflow-x:auto; padding:2px 2px 4px; scrollbar-width:none;}
+  .chips::-webkit-scrollbar{display:none;}
+  .chip{
+    flex-shrink:0; font-size:13px; font-family:'Karla',sans-serif; font-weight:600;
+    background:var(--surface); border:1px solid var(--line); color:var(--muted);
+    padding:8px 14px; border-radius:20px; cursor:pointer; white-space:nowrap;
+  }
+  .chip.active{background:var(--accent); border-color:var(--accent); color:#1b2b1f;}
+
+  .grid{display:grid; grid-template-columns:repeat(3, 1fr); gap:9px; margin-top:12px;}
+  .card{
+    background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:12px 8px; text-align:center; cursor:pointer;
+  }
+  .card:active{background:var(--surface2);}
+  .card.in-list{border-color:var(--accent); background:rgba(231,169,76,0.08);}
+  .card .icon{font-size:24px; display:block; margin-bottom:6px;}
+  .card .name{font-size:12.5px; line-height:1.25; display:block;}
+
+  footer{text-align:center; color:var(--line); font-family:'IBM Plex Mono', monospace; font-size:11px; padding:30px 0 10px;}
+</style>
+</head>
+<body>
+
+<!-- ============ OVERVIEW SCREEN ============ -->
+<div id="screenOverview">
+  <header class="top">
+    <div class="row">
+      <h1>Meine <span class="accentword">Listen</span></h1>
+      <span class="syncstatus" id="syncStatus1"><span class="pulse"></span>offline</span>
+      <button class="editbtn" id="editToggle">Bearbeiten</button>
+    </div>
+  </header>
+  <div class="liststack" id="liststack"></div>
+</div>
+
+<!-- ============ DETAIL SCREEN ============ -->
+<div id="screenDetail" class="hidden">
+  <header class="top">
+    <div class="row">
+      <button class="backbtn" id="backBtn">‹</button>
+      <h1 id="detailTitle" style="font-size:22px; flex:1;">Liste</h1>
+      <span class="syncstatus" id="syncStatus2"><span class="pulse"></span>offline</span>
+      <div class="count" id="openCount">0 offen</div>
+    </div>
+  </header>
+
+  <div class="searchbar">
+    <div class="searchbox">
+      <input id="searchInput" type="text" placeholder="Artikel suchen oder hinzufügen…" autocomplete="off">
+      <button id="addBtn">Hinzufügen</button>
+    </div>
+    <div class="suggestions" id="suggestions" style="display:none;"></div>
+  </div>
+
+  <section>
+    <div class="section-title"><h2>Auf dem Zettel</h2><div class="line"></div></div>
+    <div id="openList"></div>
+  </section>
+
+  <section id="doneSection" style="display:none;">
+    <div class="section-title"><h2>Erledigt</h2><div class="line"></div></div>
+    <ul class="list-items" id="doneList"></ul>
+    <button class="clear-btn" id="clearBtn">Erledigte entfernen</button>
+  </section>
+
+  <section>
+    <div class="section-title"><h2>Vorrat durchstöbern</h2><div class="line"></div></div>
+    <div class="chips" id="catChips"></div>
+    <div class="grid" id="dbGrid"></div>
+  </section>
+
+  <footer>für zwei · geteilter Zettel</footer>
+</div>
+
+<script>
+const CATS = [
+  {k:'obst', n:'Obst & Gemüse', i:'🍏'},
+  {k:'milch', n:'Milchprodukte & Eier', i:'🥛'},
+  {k:'brot', n:'Brot & Backwaren', i:'🥐'},
+  {k:'fleisch', n:'Fleisch & Fisch', i:'🥩'},
+  {k:'vorrat', n:'Vorrat & Trockenware', i:'🍚'},
+  {k:'tiefkuehl', n:'Tiefkühl', i:'❄️'},
+  {k:'getraenke', n:'Getränke', i:'🥤'},
+  {k:'suess', n:'Süßes & Snacks', i:'🍫'},
+  {k:'gewuerz', n:'Gewürze & Saucen', i:'🧂'},
+  {k:'haushalt', n:'Haushalt & Drogerie', i:'🧻'},
+  {k:'sonstiges', n:'Sonstiges', i:'📝'},
+];
+const catMap = Object.fromEntries(CATS.map(c=>[c.k,c]));
+
+const MASTER = [
+["Äpfel","obst","🍎"],["Bananen","obst","🍌"],["Orangen","obst","🍊"],["Zitronen","obst","🍋"],
+["Trauben","obst","🍇"],["Erdbeeren","obst","🍓"],["Blaubeeren","obst","🫐"],["Birnen","obst","🍐"],
+["Pfirsiche","obst","🍑"],["Kiwi","obst","🥝"],["Avocado","obst","🥑"],["Tomaten","obst","🍅"],
+["Gurken","obst","🥒"],["Paprika","obst","🫑"],["Zwiebeln","obst","🧅"],["Knoblauch","obst","🧄"],
+["Kartoffeln","obst","🥔"],["Karotten","obst","🥕"],["Salat","obst","🥬"],["Brokkoli","obst","🥦"],
+["Blumenkohl","obst","🥦"],["Zucchini","obst","🥒"],["Champignons","obst","🍄"],["Spinat","obst","🥬"],
+["Lauch","obst","🥬"],["Sellerie","obst","🥬"],["Radieschen","obst","🌱"],["Rote Bete","obst","🥕"],
+["Süßkartoffeln","obst","🍠"],["Mais","obst","🌽"],
+
+["Milch","milch","🥛"],["Buttermilch","milch","🥛"],["Sahne","milch","🥛"],["Schlagsahne","milch","🥛"],
+["Joghurt","milch","🥣"],["Quark","milch","🥣"],["Butter","milch","🧈"],["Margarine","milch","🧈"],
+["Käse","milch","🧀"],["Gouda","milch","🧀"],["Emmentaler","milch","🧀"],["Mozzarella","milch","🧀"],
+["Feta","milch","🧀"],["Frischkäse","milch","🧀"],["Parmesan","milch","🧀"],["Eier","milch","🥚"],
+["Kondensmilch","milch","🥫"],["Hafermilch","milch","🥛"],["Mandelmilch","milch","🥛"],["Sojajoghurt","milch","🥣"],
+
+["Brot","brot","🍞"],["Toastbrot","brot","🍞"],["Brötchen","brot","🥖"],["Baguette","brot","🥖"],
+["Vollkornbrot","brot","🍞"],["Croissants","brot","🥐"],["Knäckebrot","brot","🍘"],["Tortillas","brot","🫓"],
+["Mehl","brot","🌾"],["Zucker","brot","🧂"],["Hefe","brot","🍞"],["Backpulver","brot","🧁"],
+["Vanillezucker","brot","🧁"],["Haferflocken","brot","🌾"],["Müsli","brot","🥣"],["Cornflakes","brot","🥣"],
+
+["Hähnchenbrust","fleisch","🍗"],["Hackfleisch","fleisch","🥩"],["Rindersteak","fleisch","🥩"],
+["Schweinefilet","fleisch","🥩"],["Speck","fleisch","🥓"],["Wurst","fleisch","🌭"],["Salami","fleisch","🍖"],
+["Schinken","fleisch","🍖"],["Lachs","fleisch","🐟"],["Thunfisch","fleisch","🐟"],["Garnelen","fleisch","🍤"],
+["Fischstäbchen","fleisch","🐟"],["Bratwurst","fleisch","🌭"],["Leberkäse","fleisch","🍖"],
+
+["Nudeln","vorrat","🍝"],["Reis","vorrat","🍚"],["Linsen","vorrat","🫘"],["Kichererbsen","vorrat","🫘"],
+["Bohnen","vorrat","🫘"],["Passierte Tomaten","vorrat","🍅"],["Kokosmilch","vorrat","🥥"],["Brühe","vorrat","🍲"],
+["Öl","vorrat","🛢️"],["Olivenöl","vorrat","🫒"],["Essig","vorrat","🧴"],["Honig","vorrat","🍯"],
+["Marmelade","vorrat","🍓"],["Nutella","vorrat","🍫"],["Erdnussbutter","vorrat","🥜"],["Nüsse","vorrat","🥜"],
+["Mandeln","vorrat","🌰"],["Rosinen","vorrat","🍇"],["Konserven","vorrat","🥫"],["Suppe","vorrat","🍲"],
+
+["Tiefkühlgemüse","tiefkuehl","❄️"],["Tiefkühlpizza","tiefkuehl","🍕"],["Eis","tiefkuehl","🍦"],
+["Pommes","tiefkuehl","🍟"],["Tiefkühlbeeren","tiefkuehl","🫐"],["Tiefkühlkräuter","tiefkuehl","🌿"],
+["Tiefkühlfisch","tiefkuehl","🐟"],
+
+["Wasser","getraenke","💧"],["Mineralwasser","getraenke","🫧"],["Apfelsaft","getraenke","🧃"],
+["Orangensaft","getraenke","🧃"],["Cola","getraenke","🥤"],["Limonade","getraenke","🥤"],
+["Bier","getraenke","🍺"],["Wein","getraenke","🍷"],["Kaffee","getraenke","☕"],["Tee","getraenke","🍵"],
+["Energydrink","getraenke","⚡"],
+
+["Schokolade","suess","🍫"],["Kekse","suess","🍪"],["Chips","suess","🥔"],["Gummibärchen","suess","🐻"],
+["Popcorn","suess","🍿"],["Salzstangen","suess","🥨"],["Müsliriegel","suess","🍫"],["Eis am Stiel","suess","🍦"],
+
+["Salz","gewuerz","🧂"],["Pfeffer","gewuerz","🧂"],["Paprikapulver","gewuerz","🌶️"],["Curry","gewuerz","🍛"],
+["Zimt","gewuerz","🪵"],["Oregano","gewuerz","🌿"],["Basilikum","gewuerz","🌿"],["Sojasauce","gewuerz","🥢"],
+["Ketchup","gewuerz","🍅"],["Senf","gewuerz","🟡"],["Mayonnaise","gewuerz","🥚"],["Pesto","gewuerz","🌿"],
+["Chilisauce","gewuerz","🌶️"],["Sriracha","gewuerz","🌶️"],
+
+["Toilettenpapier","haushalt","🧻"],["Küchenrolle","haushalt","🧻"],["Spülmittel","haushalt","🧴"],
+["Waschmittel","haushalt","🧴"],["Müllbeutel","haushalt","🗑️"],["Zahnpasta","haushalt","🪥"],
+["Duschgel","haushalt","🧴"],["Shampoo","haushalt","🧴"],["Deo","haushalt","🧴"],["Rasierklingen","haushalt","🪒"],
+["Servietten","haushalt","🧻"],["Alufolie","haushalt","🧻"],["Frischhaltefolie","haushalt","🧻"],
+["Batterien","haushalt","🔋"],["Kerzen","haushalt","🕯️"],
+].map(([n,c,i])=>({n,c,i}));
+
+const QTY_STEPS = [1,2,3,4,5,6,8,10];
+const CARD_COLORS = ['#28422f','#3a2c20','#233a45','#402a2a','#2c3a2c','#33283f','#2f3c40','#413027'];
+
+const STORE_ICON_RULES = [
+  [['wochenmarkt','markt'],'🧺'],
+  [['gewürz','gewuerz'],'🧂'],
+  [['getränke','getraenke'],'🥤'],
+  [['obi','hornbach','bauhaus','toom','baumarkt'],'🔨'],
+  [['rossmann','dm','budni','müller','muller','drogerie'],'🧴'],
+  [['lidl','aldi','edeka','rewe','netto','real','kaufland','penny','famila'],'🛒'],
+];
+function guessIcon(name){
+  const q = name.toLowerCase();
+  for(const [keys,icon] of STORE_ICON_RULES){
+    if(keys.some(k=>q.includes(k))) return icon;
+  }
+  return '🛍️';
+}
+
+let lists = [];        // {id,name,icon,color,createdAt}
+let items = [];        // {id,listId,n,c,i,checked,qty}
+let custom = [];       // {n,c,i}
+let currentListId = null;
+let activeCat = null;
+let editMode = false;
+let searchTimer = null;
+
+const $ = sel => document.querySelector(sel);
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
+
+function allDbItems(){ return MASTER.concat(custom); }
+function currentItems(){ return items.filter(x=>x.listId===currentListId); }
+
+// ---------- storage (mit lokalem Zwischenspeicher für offline Betrieb) ----------
+function localGet(key){
+  try{ const v = localStorage.getItem('cache:'+key); return v; }catch(e){ return null; }
+}
+function localSet(key, value){
+  try{ localStorage.setItem('cache:'+key, value); }catch(e){}
+}
+function pendingKeys(){
+  try{ return JSON.parse(localStorage.getItem('pendingKeys')||'[]'); }catch(e){ return []; }
+}
+function markPending(key){
+  const p = pendingKeys();
+  if(!p.includes(key)){ p.push(key); try{ localStorage.setItem('pendingKeys', JSON.stringify(p)); }catch(e){} }
+  updateSyncStatus();
+}
+function clearPendingKey(key){
+  const p = pendingKeys().filter(k=>k!==key);
+  try{ localStorage.setItem('pendingKeys', JSON.stringify(p)); }catch(e){}
+  updateSyncStatus();
+}
+function updateSyncStatus(){
+  const isOffline = !navigator.onLine || pendingKeys().length > 0;
+  [$('#syncStatus1'), $('#syncStatus2')].forEach(el => { if(el) el.classList.toggle('show', isOffline); });
+}
+
+async function storageGet(key){
+  try{
+    const r = await window.storage.get(key, true);
+    const val = r ? r.value : null;
+    if(val !== null){ localSet(key, val); }
+    return val;
+  }catch(e){
+    return localGet(key);
+  }
+}
+async function storageSet(key, value){
+  localSet(key, value); // sofort lokal sichern, funktioniert auch ohne Empfang
+  try{
+    await window.storage.set(key, value, true);
+    clearPendingKey(key);
+  }catch(e){
+    markPending(key);
+  }
+}
+async function flushPending(){
+  const p = pendingKeys();
+  for(const key of p){
+    const val = localGet(key);
+    if(val === null) continue;
+    try{
+      await window.storage.set(key, val, true);
+      clearPendingKey(key);
+    }catch(e){
+      break; // weiterhin offline, später erneut versuchen
+    }
+  }
+}
+
+async function loadAll(){
+  const raw1 = await storageGet('shoppingapp:lists'); lists = raw1 ? JSON.parse(raw1) : [];
+  const raw2 = await storageGet('shoppingapp:items'); items = raw2 ? JSON.parse(raw2) : [];
+  const raw3 = await storageGet('shoppingapp:custom'); custom = raw3 ? JSON.parse(raw3) : [];
+
+  if(lists.length === 0){
+    lists.push({id:uid(), name:'Einkaufsliste', icon:'🛍️', color:CARD_COLORS[0], createdAt:Date.now()});
+    await saveLists();
+  }
+  updateSyncStatus();
+  renderOverview();
+}
+async function saveLists(){ await storageSet('shoppingapp:lists', JSON.stringify(lists)); }
+async function saveItems(){ await storageSet('shoppingapp:items', JSON.stringify(items)); }
+async function saveCustom(){ await storageSet('shoppingapp:custom', JSON.stringify(custom)); }
+
+// ---------- navigation ----------
+function showOverview(){
+  currentListId = null;
+  $('#screenDetail').classList.add('hidden');
+  $('#screenOverview').classList.remove('hidden');
+  renderOverview();
+}
+function openList(id){
+  currentListId = id;
+  const l = lists.find(x=>x.id===id);
+  if(!l) return;
+  $('#detailTitle').textContent = l.name;
+  $('#screenOverview').classList.add('hidden');
+  $('#screenDetail').classList.remove('hidden');
+  activeCat = null;
+  render();
+}
+
+// ---------- list CRUD ----------
+async function createList(name){
+  const n = name.trim();
+  if(!n) return;
+  const color = CARD_COLORS[lists.length % CARD_COLORS.length];
+  const l = {id:uid(), name:n, icon:guessIcon(n), color, createdAt:Date.now()};
+  lists.push(l);
+  await saveLists();
+  renderOverview();
+}
+async function deleteList(id){
+  lists = lists.filter(x=>x.id!==id);
+  items = items.filter(x=>x.listId!==id);
+  await saveLists();
+  await saveItems();
+  renderOverview();
+}
+
+// ---------- item logic ----------
+function findInDb(name){
+  const q = name.trim().toLowerCase();
+  return allDbItems().find(it => it.n.toLowerCase() === q);
+}
+function addToList(name, cat, icon){
+  const existingOpen = currentItems().find(it => it.n.toLowerCase() === name.toLowerCase() && !it.checked);
+  if(existingOpen) return;
+  const existingDone = currentItems().find(it => it.n.toLowerCase() === name.toLowerCase() && it.checked);
+  if(existingDone){ existingDone.checked = false; saveItems(); render(); return; }
+  items.push({id:uid(), listId:currentListId, n:name, c:cat||'sonstiges', i:icon||'📝', checked:false, qty:1});
+  saveItems(); render();
+}
+function addCustomAndList(name){
+  const n = name.trim();
+  if(!n) return;
+  if(!findInDb(n)){ custom.push({n, c:'sonstiges', i:'📝'}); saveCustom(); }
+  const db = findInDb(n);
+  addToList(n, db.c, db.i);
+}
+function toggleCheck(id){
+  const it = items.find(x=>x.id===id); if(!it) return;
+  it.checked = !it.checked; saveItems(); render();
+}
+function cycleQty(id){
+  const it = items.find(x=>x.id===id); if(!it) return;
+  const i = QTY_STEPS.indexOf(it.qty);
+  it.qty = QTY_STEPS[(i+1) % QTY_STEPS.length];
+  saveItems(); render();
+}
+function removeItem(id){
+  items = items.filter(x=>x.id!==id); saveItems(); render();
+}
+function clearDone(){
+  items = items.filter(x=> !(x.listId===currentListId && x.checked));
+  saveItems(); render();
+}
+
+// ---------- render: overview ----------
+function renderOverview(){
+  const box = $('#liststack');
+  const cards = lists.map(l => {
+    const count = items.filter(x=>x.listId===l.id && !x.checked).length;
+    return `
+    <div class="listcard ${editMode?'editing':''}" style="background:${l.color}" data-open="${l.id}">
+      ${editMode ? `<button class="del" data-del="${l.id}">×</button>` : ''}
+      <div class="top">
+        <h3>${l.name}</h3>
+        <span class="badge">${count} ${count===1?'Artikel':'Artikel'}</span>
+      </div>
+      <div class="sub">antippen zum Öffnen</div>
+      <div class="icon-big">${l.icon}</div>
+    </div>`;
+  }).join('');
+  box.innerHTML = cards + `
+    <div class="addlistcard" id="showNewListForm">＋ Neue Liste</div>
+    <div class="newlistform hidden" id="newListForm">
+      <input id="newListInput" type="text" placeholder="z. B. Edeka, Wochenmarkt…" autocomplete="off">
+      <button id="createListBtn">Erstellen</button>
+    </div>
+  `;
+  $('#editToggle').textContent = editMode ? 'Fertig' : 'Bearbeiten';
+  $('#editToggle').classList.toggle('on', editMode);
+}
+
+// ---------- render: detail ----------
+function renderSuggestions(query){
+  const box = $('#suggestions');
+  const q = query.trim().toLowerCase();
+  if(!q){ box.style.display='none'; box.innerHTML=''; return; }
+  const matches = allDbItems().filter(it => it.n.toLowerCase().includes(q)).slice(0,7);
+  let html = matches.map(it => `
+    <div class="suggestion" data-add="${it.n.replace(/"/g,'&quot;')}">
+      <span>${it.i}</span><span>${it.n}</span>
+      <span class="cat">${catMap[it.c].n}</span>
+    </div>`).join('');
+  const exact = matches.some(it => it.n.toLowerCase() === q);
+  if(!exact){
+    html += `<div class="suggestion add-new" data-addnew="${query.trim().replace(/"/g,'&quot;')}">
+      <span>➕</span><span>„${query.trim()}" hinzufügen</span></div>`;
+  }
+  box.innerHTML = html;
+  box.style.display = html ? 'block' : 'none';
+}
+
+function render(){
+  if(!currentListId) return;
+  const cur = currentItems();
+  const open = cur.filter(x=>!x.checked);
+  const done = cur.filter(x=>x.checked);
+  $('#openCount').textContent = `${open.length} offen`;
+
+  const openList = $('#openList');
+  if(!open.length){
+    openList.innerHTML = `<div class="empty">Noch nichts auf dem Zettel. Unten etwas suchen oder aus dem Vorrat tippen.</div>`;
+  }else{
+    const byCat = {};
+    open.forEach(it => { (byCat[it.c] = byCat[it.c]||[]).push(it); });
+    openList.innerHTML = CATS.filter(c=>byCat[c.k]).map(c => `
+      <div class="cat-group">
+        <div class="cat-label">${c.i} ${c.n}</div>
+        <ul class="list-items">${byCat[c.k].map(it => rowHtml(it)).join('')}</ul>
+      </div>`).join('');
+  }
+
+  const doneSection = $('#doneSection');
+  if(done.length){
+    doneSection.style.display = 'block';
+    $('#doneList').innerHTML = done.map(it => rowHtml(it)).join('');
+  }else{
+    doneSection.style.display = 'none';
+  }
+
+  renderChips();
+  renderGrid();
+}
+
+function rowHtml(it){
+  return `
+    <li class="list-item ${it.checked?'done':''}" data-id="${it.id}">
+      <span class="dot" data-toggle="${it.id}"></span>
+      <span class="icon">${it.i}</span>
+      <span class="name" data-toggle="${it.id}">${it.n}<span class="strike"></span></span>
+      <span class="qty" data-qty="${it.id}" style="${it.qty>1?'':'opacity:.55'}">×${it.qty}</span>
+      <button class="remove" data-remove="${it.id}">×</button>
+    </li>`;
+}
+
+function renderChips(){
+  const box = $('#catChips');
+  box.innerHTML = CATS.filter(c => allDbItems().some(it=>it.c===c.k)).map(c => `
+    <div class="chip ${activeCat===c.k?'active':''}" data-cat="${c.k}">${c.i} ${c.n}</div>
+  `).join('');
+}
+function renderGrid(){
+  const grid = $('#dbGrid');
+  const cat = activeCat || CATS[0].k;
+  const dbItems = allDbItems().filter(it => it.c === cat);
+  const inListNames = new Set(currentItems().filter(x=>!x.checked).map(x=>x.n.toLowerCase()));
+  grid.innerHTML = dbItems.map(it => `
+    <div class="card ${inListNames.has(it.n.toLowerCase())?'in-list':''}" data-add="${it.n.replace(/"/g,'&quot;')}" data-c="${it.c}" data-i="${it.i}">
+      <span class="icon">${it.i}</span><span class="name">${it.n}</span>
+    </div>`).join('');
+}
+
+// ---------- events: overview ----------
+$('#editToggle').addEventListener('click', () => { editMode = !editMode; renderOverview(); });
+$('#backBtn').addEventListener('click', showOverview);
+
+document.body.addEventListener('click', e => {
+  // overview: open list
+  const openCard = e.target.closest('.listcard[data-open]');
+  if(openCard && !e.target.closest('[data-del]')){
+    if(!editMode) openList(openCard.dataset.open);
+    return;
+  }
+  const delBtn = e.target.closest('[data-del]');
+  if(delBtn){ deleteList(delBtn.dataset.del); return; }
+
+  const showForm = e.target.closest('#showNewListForm');
+  if(showForm){
+    $('#showNewListForm').classList.add('hidden');
+    $('#newListForm').classList.remove('hidden');
+    $('#newListInput').focus();
+    return;
+  }
+  const createBtn = e.target.closest('#createListBtn');
+  if(createBtn){
+    const v = $('#newListInput').value;
+    if(v.trim()){ createList(v); }
+    return;
+  }
+
+  // detail: toggle / qty / remove / add-card / chip
+  const t = e.target.closest('[data-toggle]');
+  if(t){ toggleCheck(t.dataset.toggle); return; }
+  const q = e.target.closest('[data-qty]');
+  if(q){ cycleQty(q.dataset.qty); return; }
+  const r = e.target.closest('[data-remove]');
+  if(r){ removeItem(r.dataset.remove); return; }
+  const card = e.target.closest('.card[data-add]');
+  if(card){ addToList(card.dataset.add, card.dataset.c, card.dataset.i); return; }
+  const chip = e.target.closest('.chip[data-cat]');
+  if(chip){ activeCat = chip.dataset.cat; renderChips(); renderGrid(); return; }
+});
+document.body.addEventListener('keydown', e => {
+  if(e.target && e.target.id === 'newListInput' && e.key === 'Enter'){
+    e.preventDefault();
+    const v = e.target.value;
+    if(v.trim()) createList(v);
+  }
+});
+
+// ---------- events: detail search ----------
+$('#searchInput').addEventListener('input', e => {
+  clearTimeout(searchTimer);
+  const v = e.target.value;
+  searchTimer = setTimeout(()=>renderSuggestions(v), 80);
+});
+$('#searchInput').addEventListener('keydown', e => {
+  if(e.key === 'Enter'){
+    e.preventDefault();
+    const v = $('#searchInput').value.trim();
+    if(!v) return;
+    addCustomAndList(v);
+    $('#searchInput').value=''; $('#suggestions').style.display='none';
+  }
+});
+$('#addBtn').addEventListener('click', () => {
+  const v = $('#searchInput').value.trim();
+  if(!v) return;
+  addCustomAndList(v);
+  $('#searchInput').value=''; $('#suggestions').style.display='none';
+});
+$('#suggestions').addEventListener('click', e => {
+  const s = e.target.closest('.suggestion');
+  if(!s) return;
+  if(s.dataset.add){ const db = findInDb(s.dataset.add); addToList(db.n, db.c, db.i); }
+  else if(s.dataset.addnew){ addCustomAndList(s.dataset.addnew); }
+  $('#searchInput').value=''; $('#suggestions').style.display='none';
+});
+document.addEventListener('click', e => {
+  if(!e.target.closest('.searchbar')) $('#suggestions').style.display='none';
+});
+$('#clearBtn').addEventListener('click', clearDone);
+
+// ---------- initial load + sync ----------
+loadAll();
+
+async function syncTick(){
+  await flushPending(); // zuerst lokal wartende Änderungen hochladen, falls wieder online
+  try{
+    const r1 = await window.storage.get('shoppingapp:lists', true);
+    const r2 = await window.storage.get('shoppingapp:items', true);
+    const remoteLists = r1 ? r1.value : '[]';
+    const remoteItems = r2 ? r2.value : '[]';
+    const typing = document.activeElement && (document.activeElement.id === 'searchInput' || document.activeElement.id === 'newListInput');
+    if(!typing && pendingKeys().length === 0){
+      let changed = false;
+      if(remoteLists !== JSON.stringify(lists)){ lists = JSON.parse(remoteLists); localSet('shoppingapp:lists', remoteLists); changed = true; }
+      if(remoteItems !== JSON.stringify(items)){ items = JSON.parse(remoteItems); localSet('shoppingapp:items', remoteItems); changed = true; }
+      if(changed){
+        if(currentListId){ if(lists.find(l=>l.id===currentListId)){ render(); } else { showOverview(); } }
+        else{ renderOverview(); }
+      }
+    }
+  }catch(e){
+    // kein Empfang, mit lokalem Stand weiterarbeiten
+  }
+  updateSyncStatus();
+}
+setInterval(syncTick, 5000);
+
+window.addEventListener('online', syncTick);
+window.addEventListener('offline', updateSyncStatus);
+
+// ---------- als WebApp installierbar machen ----------
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
+</script>
+</body>
+</html>
