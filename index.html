@@ -2,16 +2,8 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
-<meta name="theme-color" content="#16231c">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Zettel">
-<link rel="manifest" href="./manifest.json">
-<link rel="apple-touch-icon" href="./icon-180.png">
-<link rel="icon" href="./icon-192.png">
 <title>Einkaufszettel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -31,7 +23,7 @@
   html,body{margin:0; padding:0; background:var(--bg); color:var(--text);}
   body{
     font-family:'Karla', sans-serif;
-    padding-bottom:calc(48px + env(safe-area-inset-bottom, 10px));
+    padding-bottom:48px;
     min-height:100vh;
     background:
       radial-gradient(circle at 20% 0%, rgba(231,169,76,0.08), transparent 45%),
@@ -46,7 +38,7 @@
   header.top{
     position:sticky; top:0; z-index:20;
     background:linear-gradient(var(--bg) 82%, transparent);
-    padding:calc(18px + env(safe-area-inset-top, 24px)) 0 10px;
+    padding:18px 0 10px;
   }
   header.top .row{display:flex; align-items:center; justify-content:space-between; padding:0 16px; gap:10px;}
   header.top h1{font-size:28px; font-weight:700; letter-spacing:0.2px; display:flex; align-items:center; gap:10px;}
@@ -272,8 +264,46 @@
   <footer>für zwei · geteilter Zettel</footer>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+  // Firebase Setup – ersetzt window.storage 1:1, damit der Rest des Codes unverändert bleibt
+  const firebaseConfig = {
+    apiKey: "AIzaSyBFbKIBKr0gr621e8XSljAG4lGXOSrIxwo",
+    authDomain: "homedashboard-8d951.firebaseapp.com",
+    projectId: "homedashboard-8d951",
+    storageBucket: "homedashboard-8d951.firebasestorage.app",
+    messagingSenderId: "443725141758",
+    appId: "1:443725141758:web:64331ff8100f27acd037af"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const COLLECTION = 'household';
+
+  window.storage = {
+    async get(key, shared) {
+      const snap = await db.collection(COLLECTION).doc(key).get();
+      if (!snap.exists) return null;
+      return { key, value: snap.data().value, shared: !!shared };
+    },
+    async set(key, value, shared) {
+      await db.collection(COLLECTION).doc(key).set({ value, updatedAt: Date.now() });
+      return { key, value, shared: !!shared };
+    },
+    async delete(key, shared) {
+      await db.collection(COLLECTION).doc(key).delete();
+      return { key, deleted: true, shared: !!shared };
+    },
+    async list(prefix, shared) {
+      const snap = await db.collection(COLLECTION).get();
+      const keys = [];
+      snap.forEach((d) => {
+        if (!prefix || d.id.startsWith(prefix)) keys.push(d.id);
+      });
+      return { keys, prefix, shared: !!shared };
+    },
+  };
+</script>
 <script>
 const CATS = [
   {k:'obst', n:'Obst & Gemüse', i:'🍏'},
@@ -379,66 +409,92 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7
 function allDbItems(){ return MASTER.concat(custom); }
 function currentItems(){ return items.filter(x=>x.listId===currentListId); }
 
-// ---------- storage: Firebase Firestore (geräteübergreifend, mit eingebauter Offline Warteschlange) ----------
-const firebaseConfig = {
-  apiKey: "AIzaSyAsHEUsZYL8jjse5EdxfeDy_JDs6PKymVU",
-  authDomain: "einkaufszettel-96464.firebaseapp.com",
-  projectId: "einkaufszettel-96464",
-  storageBucket: "einkaufszettel-96464.firebasestorage.app",
-  messagingSenderId: "814763930088",
-  appId: "1:814763930088:web:b2b3301a535846ff9d345d"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-try{ db.enablePersistence({synchronizeTabs:true}); }catch(e){ /* z. B. mehrere Tabs offen, unkritisch */ }
-
-const listsRef = db.collection('einkaufszettel').doc('lists');
-const itemsRef = db.collection('einkaufszettel').doc('items');
-const customRef = db.collection('einkaufszettel').doc('custom');
-
+// ---------- storage (mit lokalem Zwischenspeicher für offline Betrieb) ----------
+function localGet(key){
+  try{ const v = localStorage.getItem('cache:'+key); return v; }catch(e){ return null; }
+}
+function localSet(key, value){
+  try{ localStorage.setItem('cache:'+key, value); }catch(e){}
+}
+function pendingKeys(){
+  try{ return JSON.parse(localStorage.getItem('pendingKeys')||'[]'); }catch(e){ return []; }
+}
+function markPending(key){
+  const p = pendingKeys();
+  if(!p.includes(key)){ p.push(key); try{ localStorage.setItem('pendingKeys', JSON.stringify(p)); }catch(e){} }
+  updateSyncStatus();
+}
+function clearPendingKey(key){
+  const p = pendingKeys().filter(k=>k!==key);
+  try{ localStorage.setItem('pendingKeys', JSON.stringify(p)); }catch(e){}
+  updateSyncStatus();
+}
 function updateSyncStatus(){
-  const isOffline = !navigator.onLine;
+  const isOffline = !navigator.onLine || pendingKeys().length > 0;
   [$('#syncStatus1'), $('#syncStatus2')].forEach(el => { if(el) el.classList.toggle('show', isOffline); });
 }
-function isTyping(){
-  return document.activeElement && (document.activeElement.id === 'searchInput' || document.activeElement.id === 'newListInput');
+
+async function storageGet(key){
+  try{
+    const r = await window.storage.get(key, true);
+    const val = r ? r.value : null;
+    if(val !== null){ localSet(key, val); }
+    showDebug(null);
+    return val;
+  }catch(e){
+    showDebug(`Firestore-Fehler bei "${key}": ${e && e.message ? e.message : e}`);
+    return localGet(key);
+  }
+}
+function showDebug(msg){
+  let el = document.getElementById('debugBanner');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'debugBanner';
+    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#8b1e1e;color:#fff;font-size:12px;padding:8px 12px;z-index:9999;font-family:monospace;word-break:break-word;';
+    document.body.appendChild(el);
+  }
+  if(msg){ el.textContent = msg; el.style.display = 'block'; }
+  else { el.style.display = 'none'; }
+}
+async function storageSet(key, value){
+  localSet(key, value); // sofort lokal sichern, funktioniert auch ohne Empfang
+  try{
+    await window.storage.set(key, value, true);
+    clearPendingKey(key);
+  }catch(e){
+    markPending(key);
+  }
+}
+async function flushPending(){
+  const p = pendingKeys();
+  for(const key of p){
+    const val = localGet(key);
+    if(val === null) continue;
+    try{
+      await window.storage.set(key, val, true);
+      clearPendingKey(key);
+    }catch(e){
+      break; // weiterhin offline, später erneut versuchen
+    }
+  }
 }
 
-async function saveLists(){ try{ await listsRef.set({value:lists}); }catch(e){} }
-async function saveItems(){ try{ await itemsRef.set({value:items}); }catch(e){} }
-async function saveCustom(){ try{ await customRef.set({value:custom}); }catch(e){} }
-
 async function loadAll(){
-  try{
-    const snap = await listsRef.get();
-    const existing = snap.exists ? (snap.data().value || []) : [];
-    if(existing.length === 0){
-      lists = [{id:uid(), name:'Einkaufsliste', icon:'🛍️', color:CARD_COLORS[0], createdAt:Date.now()}];
-      await saveLists();
-    }
-  }catch(e){ /* offline beim allerersten Start ohne lokalen Cache, wartet auf Verbindung */ }
+  const raw1 = await storageGet('shoppingapp:lists'); lists = raw1 ? JSON.parse(raw1) : [];
+  const raw2 = await storageGet('shoppingapp:items'); items = raw2 ? JSON.parse(raw2) : [];
+  const raw3 = await storageGet('shoppingapp:custom'); custom = raw3 ? JSON.parse(raw3) : [];
 
-  listsRef.onSnapshot(snap => {
-    lists = snap.exists ? (snap.data().value || []) : [];
-    if(isTyping()) return;
-    if(currentListId && !lists.find(l=>l.id===currentListId)) { showOverview(); return; }
-    if(currentListId){ const l = lists.find(x=>x.id===currentListId); if(l) $('#detailTitle').textContent = l.name; }
-    if(!currentListId) renderOverview(); else render();
-  });
-  itemsRef.onSnapshot(snap => {
-    items = snap.exists ? (snap.data().value || []) : [];
-    if(isTyping()) return;
-    if(currentListId) render(); else renderOverview();
-  });
-  customRef.onSnapshot(snap => {
-    custom = snap.exists ? (snap.data().value || []) : [];
-    if(isTyping()) return;
-    if(currentListId) render();
-  });
-
+  if(lists.length === 0){
+    lists.push({id:uid(), name:'Einkaufsliste', icon:'🛍️', color:CARD_COLORS[0], createdAt:Date.now()});
+    await saveLists();
+  }
   updateSyncStatus();
   renderOverview();
 }
+async function saveLists(){ await storageSet('shoppingapp:lists', JSON.stringify(lists)); }
+async function saveItems(){ await storageSet('shoppingapp:items', JSON.stringify(items)); }
+async function saveCustom(){ await storageSet('shoppingapp:custom', JSON.stringify(custom)); }
 
 // ---------- navigation ----------
 function showOverview(){
@@ -705,15 +761,32 @@ $('#clearBtn').addEventListener('click', clearDone);
 // ---------- initial load + sync ----------
 loadAll();
 
-window.addEventListener('online', updateSyncStatus);
-window.addEventListener('offline', updateSyncStatus);
-
-// ---------- als WebApp installierbar machen ----------
-if('serviceWorker' in navigator){
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(()=>{});
-  });
+async function syncTick(){
+  await flushPending(); // zuerst lokal wartende Änderungen hochladen, falls wieder online
+  try{
+    const r1 = await window.storage.get('shoppingapp:lists', true);
+    const r2 = await window.storage.get('shoppingapp:items', true);
+    const remoteLists = r1 ? r1.value : '[]';
+    const remoteItems = r2 ? r2.value : '[]';
+    const typing = document.activeElement && (document.activeElement.id === 'searchInput' || document.activeElement.id === 'newListInput');
+    if(!typing && pendingKeys().length === 0){
+      let changed = false;
+      if(remoteLists !== JSON.stringify(lists)){ lists = JSON.parse(remoteLists); localSet('shoppingapp:lists', remoteLists); changed = true; }
+      if(remoteItems !== JSON.stringify(items)){ items = JSON.parse(remoteItems); localSet('shoppingapp:items', remoteItems); changed = true; }
+      if(changed){
+        if(currentListId){ if(lists.find(l=>l.id===currentListId)){ render(); } else { showOverview(); } }
+        else{ renderOverview(); }
+      }
+    }
+  }catch(e){
+    // kein Empfang, mit lokalem Stand weiterarbeiten
+  }
+  updateSyncStatus();
 }
+setInterval(syncTick, 5000);
+
+window.addEventListener('online', syncTick);
+window.addEventListener('offline', updateSyncStatus);
 </script>
 </body>
 </html>
