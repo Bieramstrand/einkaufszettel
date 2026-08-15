@@ -2,14 +2,16 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#16231c">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Zettel">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#16231c">
-<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0CAIAAACyr5FlAAAC80lEQVR4nO3du3FTURRAUZuhBic4wi2QUAM9UBw9UAMJNZDRBwkR1haybOkdvbtW6JFm3mfr6F5rNLp/eHq8g0PebX0AzCUOkjhI4iCJgyQOkjhI4iCJgyQOkjhI4iCJgyQOkjhI4iCJgyQOkjhI4iCJgyQOkjhI4iCJgyQO0vutD2CEXz9/PP/jx0+fr38ko9yv/F3Zg008t2wl676tnFjGix65MytOjrNv9mojZLnJ8ZoxsNoIWSuO19/dpfpYKI63uq/r9GEr+9c/64l1CjhilQXpkZt9ZJl53rN2Y4m3lbPv8Xnd7MYScZRTXv0rTIiy/zjqJX76Xa9H7n547D+Og146D9acHzuP49Iv7n0Pj53HcdB5Y2DB4bFiHJxIHKQ9x3GdBcGOlx17juOg1ywdVlt2LBcHpxMHSRwkcZBW+cieM5gcJHGQxEESB0kcJHGQbuOrCbv8cGv+JzUmB0kcJHGQbiCOXS447m7hvG4gDrYiDpI4SOIgiYN0G/8hvZzf378ef8CHL9+ucyQDTZ8c8/d7rzH87KbHwYbEQRIHSRwkcZBGxzF8Mf8mJp/j6DjYljhI4iCJgyQOkjhIc+OYvMd7W2PPdG4cbE4cJHGQxEESB0kcpKFxjN3dXcjM8x0aBxOIgyQOkjhI4iCJgzQxjpn7uksbeNYT42AIcZDEQRIHSRykcXEMXLRfzbRzHxcHc4iDJA6SOEjiIImDNCuOaXu56xt1BWbFwSjiIImDJA6SOEjiIA2KY9QubkNzrsOgOJhGHCRxkMRBEgdpShxzlugTDLkaq/906Mq/DPpfUyYHA4mDJA6SOEjiII2IY8jObZQJ12REHMwkDpI4SPcPT49bHwNDmRwkcZDEQRIHSRwkcZDEQRIHSRwkcZDEQRIHSRwkcZDEQRIHSRwkcZDEQRIHSRwkcZDEQRIHSRwkcZDEQRIHSRwkcZDEQRIHSRwkcZDEQRIHSRwkcZDEQRIHSRwkcZDEQRIHSRwkcZDEQfoDKkd/7QPzORQAAAAASUVORK5CYII=">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icon-180.png">
+<link rel="icon" href="./icon-192.png">
 <title>Einkaufszettel</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Karla:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -29,8 +31,7 @@
   html,body{margin:0; padding:0; background:var(--bg); color:var(--text);}
   body{
     font-family:'Karla', sans-serif;
-    padding-bottom:48px;
-    padding-top:calc(66px + env(safe-area-inset-top));
+    padding-bottom:calc(48px + env(safe-area-inset-bottom, 10px));
     min-height:100vh;
     background:
       radial-gradient(circle at 20% 0%, rgba(231,169,76,0.08), transparent 45%),
@@ -43,9 +44,9 @@
 
   /* ---------- Header (shared) ---------- */
   header.top{
-    position:fixed; top:0; left:0; right:0; z-index:20;
+    position:sticky; top:0; z-index:20;
     background:linear-gradient(var(--bg) 82%, transparent);
-    padding:calc(18px + env(safe-area-inset-top)) 0 10px;
+    padding:calc(18px + env(safe-area-inset-top, 24px)) 0 10px;
   }
   header.top .row{display:flex; align-items:center; justify-content:space-between; padding:0 16px; gap:10px;}
   header.top h1{font-size:28px; font-weight:700; letter-spacing:0.2px; display:flex; align-items:center; gap:10px;}
@@ -271,46 +272,6 @@
   <footer>für zwei · geteilter Zettel</footer>
 </div>
 
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
-<script>
-  // Firebase Setup – ersetzt window.storage 1:1, damit der Rest des Codes unverändert bleibt
-  const firebaseConfig = {
-    apiKey: "AIzaSyBFbKIBKr0gr621e8XSljAG4lGXOSrIxwo",
-    authDomain: "homedashboard-8d951.firebaseapp.com",
-    projectId: "homedashboard-8d951",
-    storageBucket: "homedashboard-8d951.firebasestorage.app",
-    messagingSenderId: "443725141758",
-    appId: "1:443725141758:web:64331ff8100f27acd037af"
-  };
-  firebase.initializeApp(firebaseConfig);
-  const db = firebase.firestore();
-  const COLLECTION = 'household';
-
-  window.storage = {
-    async get(key, shared) {
-      const snap = await db.collection(COLLECTION).doc(key).get();
-      if (!snap.exists) return null;
-      return { key, value: snap.data().value, shared: !!shared };
-    },
-    async set(key, value, shared) {
-      await db.collection(COLLECTION).doc(key).set({ value, updatedAt: Date.now() });
-      return { key, value, shared: !!shared };
-    },
-    async delete(key, shared) {
-      await db.collection(COLLECTION).doc(key).delete();
-      return { key, deleted: true, shared: !!shared };
-    },
-    async list(prefix, shared) {
-      const snap = await db.collection(COLLECTION).get();
-      const keys = [];
-      snap.forEach((d) => {
-        if (!prefix || d.id.startsWith(prefix)) keys.push(d.id);
-      });
-      return { keys, prefix, shared: !!shared };
-    },
-  };
-</script>
 <script>
 const CATS = [
   {k:'obst', n:'Obst & Gemüse', i:'🍏'},
@@ -446,23 +407,10 @@ async function storageGet(key){
     const r = await window.storage.get(key, true);
     const val = r ? r.value : null;
     if(val !== null){ localSet(key, val); }
-    showDebug(null);
     return val;
   }catch(e){
-    showDebug(`Firestore-Fehler bei "${key}": ${e && e.message ? e.message : e}`);
     return localGet(key);
   }
-}
-function showDebug(msg){
-  let el = document.getElementById('debugBanner');
-  if(!el){
-    el = document.createElement('div');
-    el.id = 'debugBanner';
-    el.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#8b1e1e;color:#fff;font-size:12px;padding:8px 12px;z-index:9999;font-family:monospace;word-break:break-word;';
-    document.body.appendChild(el);
-  }
-  if(msg){ el.textContent = msg; el.style.display = 'block'; }
-  else { el.style.display = 'none'; }
 }
 async function storageSet(key, value){
   localSet(key, value); // sofort lokal sichern, funktioniert auch ohne Empfang
@@ -522,17 +470,6 @@ function openList(id){
 }
 
 // ---------- list CRUD ----------
-const KNOWN_STORE_NAMES = ['Edeka', 'Lidl', 'Aldi', 'DM', 'Rewe', 'Gewürze'];
-async function restoreKnownLists(){
-  KNOWN_STORE_NAMES.forEach(name => {
-    if(!lists.find(l => l.name.toLowerCase() === name.toLowerCase())){
-      const color = CARD_COLORS[lists.length % CARD_COLORS.length];
-      lists.push({id:uid(), name, icon:guessIcon(name), color, createdAt:Date.now()});
-    }
-  });
-  await saveLists();
-  renderOverview();
-}
 async function createList(name){
   const n = name.trim();
   if(!n) return;
@@ -604,14 +541,12 @@ function renderOverview(){
       <div class="icon-big">${l.icon}</div>
     </div>`;
   }).join('');
-  const missingKnown = KNOWN_STORE_NAMES.some(name => !lists.find(l => l.name.toLowerCase() === name.toLowerCase()));
   box.innerHTML = cards + `
     <div class="addlistcard" id="showNewListForm">＋ Neue Liste</div>
     <div class="newlistform hidden" id="newListForm">
       <input id="newListInput" type="text" placeholder="z. B. Edeka, Wochenmarkt…" autocomplete="off">
       <button id="createListBtn">Erstellen</button>
     </div>
-    ${missingKnown ? `<div id="restoreListsLink" style="text-align:center;color:var(--muted);font-size:13px;margin-top:10px;cursor:pointer;text-decoration:underline;">Frühere Läden wiederherstellen (Edeka, Lidl, Aldi, DM, Rewe, Gewürze)</div>` : ''}
   `;
   $('#editToggle').textContent = editMode ? 'Fertig' : 'Bearbeiten';
   $('#editToggle').classList.toggle('on', editMode);
@@ -724,8 +659,6 @@ document.body.addEventListener('click', e => {
     if(v.trim()){ createList(v); }
     return;
   }
-  const restoreLink = e.target.closest('#restoreListsLink');
-  if(restoreLink){ restoreKnownLists(); return; }
 
   // detail: toggle / qty / remove / add-card / chip
   const t = e.target.closest('[data-toggle]');
@@ -809,6 +742,13 @@ setInterval(syncTick, 5000);
 
 window.addEventListener('online', syncTick);
 window.addEventListener('offline', updateSyncStatus);
+
+// ---------- als WebApp installierbar machen ----------
+if('serviceWorker' in navigator){
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
