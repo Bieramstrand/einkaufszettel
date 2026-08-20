@@ -82,6 +82,7 @@
   }
   .listcard .top{display:flex; justify-content:space-between; align-items:flex-start; position:relative; z-index:2;}
   .listcard h3{font-size:23px; font-weight:600; color:var(--text);}
+  .listcard .topright{display:flex; flex-direction:column; align-items:flex-end; gap:8px; flex-shrink:0;}
   .listcard .badge{
     background:rgba(0,0,0,0.3); color:var(--text); font-family:'IBM Plex Mono', monospace;
     font-size:12px; padding:4px 10px; border-radius:14px; white-space:nowrap; flex-shrink:0;
@@ -94,7 +95,7 @@
   }
   .listcard.editing{padding-left:46px;}
   .listcard .reorder{
-    position:absolute; top:12px; right:12px; display:flex; gap:6px; z-index:3;
+    display:flex; gap:6px; position:relative; z-index:3;
   }
   .listcard .reorder button{
     width:26px; height:26px; border-radius:50%; background:rgba(0,0,0,0.32);
@@ -609,14 +610,16 @@ function renderOverview(){
     return `
     <div class="listcard ${editMode?'editing':''}" style="background:${l.color}" data-open="${l.id}">
       ${editMode ? `<button class="del" data-del="${l.id}">×</button>` : ''}
-      ${editMode ? `
-        <div class="reorder">
-          <button data-moveup="${l.id}" ${idx===0?'disabled':''}>▲</button>
-          <button data-movedown="${l.id}" ${idx===lists.length-1?'disabled':''}>▼</button>
-        </div>` : ''}
       <div class="top">
         <h3>${l.name}</h3>
-        <span class="badge">${count} ${count===1?'Artikel':'Artikel'}</span>
+        <div class="topright">
+          <span class="badge">${count} ${count===1?'Artikel':'Artikel'}</span>
+          ${editMode ? `
+            <div class="reorder">
+              <button data-moveup="${l.id}" ${idx===0?'disabled':''}>▲</button>
+              <button data-movedown="${l.id}" ${idx===lists.length-1?'disabled':''}>▼</button>
+            </div>` : ''}
+        </div>
       </div>
       <div class="sub">antippen zum Öffnen</div>
       <div class="icon-big">${l.icon}</div>
