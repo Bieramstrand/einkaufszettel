@@ -441,9 +441,9 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 try{ db.enablePersistence({synchronizeTabs:true}); }catch(e){ /* z. B. mehrere Tabs offen, unkritisch */ }
 
-const listsRef = db.collection('household').doc('einkaufszettel-lists');
-const itemsRef = db.collection('household').doc('einkaufszettel-items');
-const customRef = db.collection('household').doc('einkaufszettel-custom');
+const listsRef = db.collection('household').doc('shoppingapp:lists');
+const itemsRef = db.collection('household').doc('shoppingapp:items');
+const customRef = db.collection('household').doc('shoppingapp:custom');
 
 function updateSyncStatus(){
   const isOffline = !navigator.onLine;
@@ -453,6 +453,12 @@ function isTyping(){
   return document.activeElement && (document.activeElement.id === 'searchInput' || document.activeElement.id === 'newListInput');
 }
 
+function parseValue(v){
+  if(v === undefined || v === null) return [];
+  if(typeof v === 'string'){ try{ return JSON.parse(v); }catch(e){ return []; } }
+  return v; // bereits natives Array/Objekt
+}
+
 async function saveLists(){ try{ await listsRef.set({value:lists}); }catch(e){} }
 async function saveItems(){ try{ await itemsRef.set({value:items}); }catch(e){} }
 async function saveCustom(){ try{ await customRef.set({value:custom}); }catch(e){} }
@@ -460,7 +466,7 @@ async function saveCustom(){ try{ await customRef.set({value:custom}); }catch(e)
 async function loadAll(){
   try{
     const snap = await listsRef.get();
-    const existing = snap.exists ? (snap.data().value || []) : [];
+    const existing = snap.exists ? parseValue(snap.data().value) : [];
     if(existing.length === 0){
       lists = [{id:uid(), name:'Einkaufsliste', icon:'🛍️', color:CARD_COLORS[0], createdAt:Date.now()}];
       await saveLists();
@@ -468,19 +474,19 @@ async function loadAll(){
   }catch(e){ /* offline beim allerersten Start ohne lokalen Cache, wartet auf Verbindung */ }
 
   listsRef.onSnapshot(snap => {
-    lists = snap.exists ? (snap.data().value || []) : [];
+    lists = snap.exists ? parseValue(snap.data().value) : [];
     if(isTyping()) return;
     if(currentListId && !lists.find(l=>l.id===currentListId)) { showOverview(); return; }
     if(currentListId){ const l = lists.find(x=>x.id===currentListId); if(l) $('#detailTitle').textContent = l.name; }
     if(!currentListId) renderOverview(); else render();
   });
   itemsRef.onSnapshot(snap => {
-    items = snap.exists ? (snap.data().value || []) : [];
+    items = snap.exists ? parseValue(snap.data().value) : [];
     if(isTyping()) return;
     if(currentListId) render(); else renderOverview();
   });
   customRef.onSnapshot(snap => {
-    custom = snap.exists ? (snap.data().value || []) : [];
+    custom = snap.exists ? parseValue(snap.data().value) : [];
     if(isTyping()) return;
     if(currentListId) render();
   });
