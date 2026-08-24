@@ -428,22 +428,22 @@ const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7
 function allDbItems(){ return MASTER.concat(custom); }
 function currentItems(){ return items.filter(x=>x.listId===currentListId); }
 
-// ---------- storage: Firebase Firestore (geräteübergreifend, mit eingebauter Offline Warteschlange) ----------
+// ---------- storage: Firebase Firestore (gemeinsames Haushalts Projekt, mit eingebauter Offline Warteschlange) ----------
 const firebaseConfig = {
-  apiKey: "AIzaSyAsHEUsZYL8jjse5EdxfeDy_JDs6PKymVU",
-  authDomain: "einkaufszettel-96464.firebaseapp.com",
-  projectId: "einkaufszettel-96464",
-  storageBucket: "einkaufszettel-96464.firebasestorage.app",
-  messagingSenderId: "814763930088",
-  appId: "1:814763930088:web:b2b3301a535846ff9d345d"
+  apiKey: "AIzaSyBFbKIBKr0gr621e8XSljAG4lGXOSrIxwo",
+  authDomain: "homedashboard-8d951.firebaseapp.com",
+  projectId: "homedashboard-8d951",
+  storageBucket: "homedashboard-8d951.firebasestorage.app",
+  messagingSenderId: "443725141758",
+  appId: "1:443725141758:web:64331ff8100f27acd037af"
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
 try{ db.enablePersistence({synchronizeTabs:true}); }catch(e){ /* z. B. mehrere Tabs offen, unkritisch */ }
 
-const listsRef = db.collection('einkaufszettel').doc('lists');
-const itemsRef = db.collection('einkaufszettel').doc('items');
-const customRef = db.collection('einkaufszettel').doc('custom');
+const listsRef = db.collection('household').doc('einkaufszettel-lists');
+const itemsRef = db.collection('household').doc('einkaufszettel-items');
+const customRef = db.collection('household').doc('einkaufszettel-custom');
 
 function updateSyncStatus(){
   const isOffline = !navigator.onLine;
