@@ -201,6 +201,51 @@
     font-size:13px; cursor:pointer; flex-shrink:0; padding:0;
   }
   .move:active{background:var(--surface2); color:var(--accent);}
+  .recipe-btn{
+    background:transparent; border:1px solid var(--line); color:var(--muted);
+    width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:13px; cursor:pointer; flex-shrink:0; padding:0;
+  }
+  .recipe-btn.has-recipe{background:rgba(231,169,76,0.15); border-color:var(--accent); color:var(--accent);}
+  .recipe-btn:active{background:var(--surface2);}
+
+  .card{position:relative;}
+  .card .recipe-badge{
+    position:absolute; top:5px; right:5px; width:22px; height:22px; border-radius:50%;
+    background:var(--surface2); border:1px solid var(--line); color:var(--muted);
+    display:flex; align-items:center; justify-content:center; font-size:11px; z-index:2;
+  }
+  .card .recipe-badge.has-recipe{background:rgba(231,169,76,0.2); border-color:var(--accent); color:var(--accent);}
+
+  .recipe-photo{width:100%; border-radius:14px; margin-bottom:12px; display:block; max-height:260px; object-fit:cover;}
+  .recipe-empty{color:var(--muted); font-size:14.5px; margin-bottom:14px; line-height:1.4;}
+  .recipe-capture{
+    display:flex; align-items:center; justify-content:center; gap:8px;
+    background:var(--accent); color:#1b2b1f; border:0; border-radius:14px;
+    padding:13px; font-family:'Karla',sans-serif; font-weight:700; font-size:15px;
+    cursor:pointer; width:100%; margin-bottom:10px;
+  }
+  .recipe-status{
+    color:var(--accent); font-size:13.5px; font-family:'IBM Plex Mono', monospace;
+    margin-bottom:10px; display:flex; align-items:center; gap:8px;
+  }
+  .recipe-spinner{
+    width:14px; height:14px; border-radius:50%; border:2px solid rgba(231,169,76,0.3);
+    border-top-color:var(--accent); animation:spin 0.8s linear infinite; flex-shrink:0;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .recipe-text{
+    width:100%; min-height:120px; background:var(--surface2); border:1px solid var(--line);
+    border-radius:14px; color:var(--text); font-family:'Karla',sans-serif; font-size:15px;
+    padding:12px; margin-bottom:10px; resize:vertical;
+  }
+  .recipe-actions{display:flex; gap:8px; margin-bottom:4px;}
+  .recipe-actions button{
+    flex:1; border-radius:14px; padding:11px; font-family:'Karla',sans-serif; font-weight:600;
+    font-size:14px; cursor:pointer; border:1px solid var(--line); background:transparent; color:var(--text);
+  }
+  .recipe-actions .save{background:var(--accent); color:#1b2b1f; border:0;}
+  .recipe-actions .delete{color:var(--accent2); border-color:var(--accent2);}
 
   .modal-overlay{
     position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:50;
@@ -321,8 +366,18 @@
   </div>
 </div>
 
+<div class="modal-overlay hidden" id="recipeModal">
+  <div class="modal-sheet">
+    <div class="modal-title" id="recipeTitle">Zubereitung</div>
+    <div id="recipeBody"></div>
+    <button class="modal-cancel" id="recipeCancel">Schließen</button>
+  </div>
+</div>
+
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <script>
 const CATS = [
   {k:'obst', n:'Obst & Gemüse', i:'🍏'},
@@ -444,6 +499,15 @@ try{ db.enablePersistence({synchronizeTabs:true}); }catch(e){ /* z. B. mehrere T
 const listsRef = db.collection('household').doc('shoppingapp:lists');
 const itemsRef = db.collection('household').doc('shoppingapp:items');
 const customRef = db.collection('household').doc('shoppingapp:custom');
+const recipesRef = db.collection('household').doc('shoppingapp:recipes');
+const storage = firebase.storage();
+let recipes = {}; // Schlüssel: Artikelname klein geschrieben, Wert: {image, text, updatedAt}
+function recipeKey(name){ return name.trim().toLowerCase(); }
+function slugify(name){
+  return name.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'') || 'artikel';
+}
 
 function updateSyncStatus(){
   const isOffline = !navigator.onLine;
@@ -462,6 +526,7 @@ function parseValue(v){
 async function saveLists(){ try{ await listsRef.set({value:lists}); }catch(e){} }
 async function saveItems(){ try{ await itemsRef.set({value:items}); }catch(e){} }
 async function saveCustom(){ try{ await customRef.set({value:custom}); }catch(e){} }
+async function saveRecipes(){ try{ await recipesRef.set({value:recipes}); }catch(e){} }
 
 async function loadAll(){
   try{
@@ -487,6 +552,12 @@ async function loadAll(){
   });
   customRef.onSnapshot(snap => {
     custom = snap.exists ? parseValue(snap.data().value) : [];
+    if(isTyping()) return;
+    if(currentListId) render();
+  });
+  recipesRef.onSnapshot(snap => {
+    const raw = snap.exists ? snap.data().value : {};
+    recipes = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : (typeof raw === 'string' ? (JSON.parse(raw||'{}')) : {});
     if(isTyping()) return;
     if(currentListId) render();
   });
@@ -603,6 +674,95 @@ function moveItemToList(itemId, targetListId){
   it.checked = false;
   saveItems(); render();
 }
+
+// ---------- Zubereitung: Foto + automatische Texterkennung, hängt am Produktnamen ----------
+let recipeItemName = null;
+
+function openRecipeModal(name){
+  recipeItemName = name;
+  $('#recipeTitle').textContent = name;
+  renderRecipeBody();
+  $('#recipeModal').classList.remove('hidden');
+}
+function closeRecipeModal(){
+  recipeItemName = null;
+  $('#recipeModal').classList.add('hidden');
+}
+
+function renderRecipeBody(recognizing){
+  const box = $('#recipeBody');
+  const key = recipeKey(recipeItemName);
+  const r = recipes[key];
+  const captureInput = `
+    <input type="file" accept="image/*" capture="environment" id="recipeCaptureInput" style="display:none;">
+    <button class="recipe-capture" id="recipeCaptureBtn">📷 ${r ? 'Foto ersetzen' : 'Foto der Verpackung aufnehmen'}</button>`;
+
+  if(!r){
+    box.innerHTML = `
+      <div class="recipe-empty">Noch kein Foto hinterlegt. Nimm die Verpackung auf, bevor sie in den Müll wandert, die Zubereitung wird automatisch erkannt.</div>
+      ${captureInput}`;
+  }else{
+    box.innerHTML = `
+      <img class="recipe-photo" src="${r.image}" alt="Verpackung ${recipeItemName}">
+      ${recognizing ? `<div class="recipe-status"><span class="recipe-spinner"></span>Text wird erkannt…</div>` : ''}
+      <textarea class="recipe-text" id="recipeTextArea" placeholder="Zubereitung…">${r.text||''}</textarea>
+      <div class="recipe-actions">
+        <button class="save" id="recipeSaveBtn">Speichern</button>
+        <button class="delete" id="recipeDeleteBtn">Löschen</button>
+      </div>
+      ${captureInput}`;
+  }
+  $('#recipeCaptureBtn').addEventListener('click', () => $('#recipeCaptureInput').click());
+  $('#recipeCaptureInput').addEventListener('change', onRecipePhotoChosen);
+  const saveBtn = $('#recipeSaveBtn');
+  if(saveBtn) saveBtn.addEventListener('click', () => {
+    const key2 = recipeKey(recipeItemName);
+    if(recipes[key2]){ recipes[key2].text = $('#recipeTextArea').value; recipes[key2].updatedAt = Date.now(); }
+    saveRecipes(); render();
+  });
+  const delBtn = $('#recipeDeleteBtn');
+  if(delBtn) delBtn.addEventListener('click', () => {
+    const key2 = recipeKey(recipeItemName);
+    delete recipes[key2];
+    saveRecipes(); render(); renderRecipeBody();
+  });
+}
+
+async function onRecipePhotoChosen(e){
+  const file = e.target.files && e.target.files[0];
+  if(!file) return;
+  const key = recipeKey(recipeItemName);
+  const previewUrl = URL.createObjectURL(file);
+
+  // Sofortiges Vorschaubild zeigen, während Texterkennung und Upload laufen
+  recipes[key] = recipes[key] || {};
+  recipes[key].image = previewUrl;
+  renderRecipeBody(true);
+
+  try{
+    // Texterkennung läuft komplett im Browser, auf Deutsch
+    const result = await Tesseract.recognize(file, 'deu');
+    recipes[key].text = (result && result.data && result.data.text) ? result.data.text.trim() : '';
+  }catch(err){
+    // Texterkennung fehlgeschlagen, Feld bleibt leer und ist manuell ausfüllbar
+    recipes[key].text = recipes[key].text || '';
+  }
+
+  try{
+    const path = `recipes/${slugify(recipeItemName)}-${Date.now()}.jpg`;
+    const ref = storage.ref().child(path);
+    await ref.put(file);
+    const url = await ref.getDownloadURL();
+    recipes[key].image = url;
+  }catch(err){
+    // Upload fehlgeschlagen (z. B. offline), Vorschau bleibt lokal sichtbar, Firestore Save folgt später erneut
+  }
+
+  recipes[key].updatedAt = Date.now();
+  saveRecipes();
+  render();
+  renderRecipeBody();
+}
 function clearDone(){
   items = items.filter(x=> !(x.listId===currentListId && x.checked));
   saveItems(); render();
@@ -701,6 +861,7 @@ function rowHtml(it){
       <span class="icon">${it.i}</span>
       <span class="name" data-toggle="${it.id}">${it.n}<span class="strike"></span></span>
       <span class="qty" data-qty="${it.id}" style="${it.qty>1?'':'opacity:.55'}">×${it.qty}</span>
+      <button class="recipe-btn ${recipes[recipeKey(it.n)]?'has-recipe':''}" data-recipe="${it.n.replace(/"/g,'&quot;')}" title="Zubereitung">📖</button>
       <button class="move" data-move="${it.id}" title="Verschieben">⇄</button>
       <button class="remove" data-remove="${it.id}">×</button>
     </li>`;
@@ -719,6 +880,7 @@ function renderGrid(){
   const inListNames = new Set(currentItems().filter(x=>!x.checked).map(x=>x.n.toLowerCase()));
   grid.innerHTML = dbItems.map(it => `
     <div class="card ${inListNames.has(it.n.toLowerCase())?'in-list':''}" data-add="${it.n.replace(/"/g,'&quot;')}" data-c="${it.c}" data-i="${it.i}">
+      <span class="recipe-badge ${recipes[recipeKey(it.n)]?'has-recipe':''}" data-recipe="${it.n.replace(/"/g,'&quot;')}" title="Zubereitung">📖</span>
       <span class="icon">${it.i}</span><span class="name">${it.n}</span>
     </div>`).join('');
 }
@@ -767,6 +929,9 @@ document.body.addEventListener('click', e => {
   const mvt = e.target.closest('[data-movetarget]');
   if(mvt){ moveItemToList(moveItemId, mvt.dataset.movetarget); closeMoveModal(); return; }
   if(e.target.id === 'moveCancel' || e.target.id === 'moveModal'){ closeMoveModal(); return; }
+  const rc = e.target.closest('[data-recipe]');
+  if(rc){ openRecipeModal(rc.dataset.recipe); return; }
+  if(e.target.id === 'recipeCancel' || e.target.id === 'recipeModal'){ closeRecipeModal(); return; }
   const card = e.target.closest('.card[data-add]');
   if(card){ addToList(card.dataset.add, card.dataset.c, card.dataset.i); return; }
   const chip = e.target.closest('.chip[data-cat]');
