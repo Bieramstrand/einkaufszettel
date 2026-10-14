@@ -218,6 +218,18 @@
   .card .recipe-badge.has-recipe{background:rgba(231,169,76,0.2); border-color:var(--accent); color:var(--accent);}
 
   .recipe-photo{width:100%; border-radius:14px; margin-bottom:12px; display:block; max-height:260px; object-fit:cover;}
+  .recipe-photos{display:flex; gap:10px; margin-bottom:12px;}
+  .recipe-photo-slot{flex:1; display:flex; flex-direction:column; align-items:stretch; gap:6px; min-width:0;}
+  .recipe-photo-label{
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--muted);
+    text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .recipe-photo.small{width:100%; height:112px; border-radius:12px; margin-bottom:0; object-fit:cover;}
+  .recipe-photo-placeholder{
+    width:100%; height:112px; border:1px dashed var(--line); border-radius:12px;
+    display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:12px;
+  }
+  .recipe-capture.small{padding:9px; font-size:13px; margin-bottom:0;}
   .recipe-empty{color:var(--muted); font-size:14.5px; margin-bottom:14px; line-height:1.4;}
   .recipe-capture{
     display:flex; align-items:center; justify-content:center; gap:8px;
@@ -610,8 +622,9 @@ function renderRecipesOverview(){
     const r = recipes[key];
     const dbMatch = allDbItems().find(it => recipeKey(it.n) === key);
     const label = dbMatch ? dbMatch.n : key;
-    const iconOrPhoto = r.image
-      ? `<img src="${r.image}" alt="${label}" style="width:40px;height:40px;object-fit:cover;border-radius:10px;margin-bottom:6px;">`
+    const thumb = r.imageFront || r.image || r.imageBack || null;
+    const iconOrPhoto = thumb
+      ? `<img src="${thumb}" alt="${label}" style="width:40px;height:40px;object-fit:cover;border-radius:10px;margin-bottom:6px;">`
       : `<span class="icon">${dbMatch ? dbMatch.i : '📖'}</span>`;
     return `
     <div class="card" data-recipe="${label.replace(/"/g,'&quot;')}">
@@ -739,39 +752,55 @@ function closeRecipeModal(){
 function renderRecipeBody(recognizing){
   const box = $('#recipeBody');
   const key = recipeKey(recipeItemName);
-  const r = recipes[key];
-  const captureInput = `
-    <input type="file" accept="image/*" id="recipeCaptureInput" style="display:none;">
-    <button class="recipe-capture" id="recipeCaptureBtn">📷 ${r ? 'Foto ersetzen' : 'Foto der Verpackung aufnehmen'}</button>`;
+  const r = recipes[key] || {};
+  const frontImg = r.imageFront || null;
+  const backImg = r.imageBack || r.image || null; // ältere Einträge hatten nur ein Foto, das zählt als Rückseite
+  const hasAny = !!(frontImg || backImg);
 
-  if(!r){
-    box.innerHTML = `
-      <div class="recipe-empty">Noch kein Foto hinterlegt. Nimm die Verpackung auf, bevor sie in den Müll wandert, die Zubereitung wird automatisch erkannt.</div>
-      ${captureInput}`;
-  }else{
-    box.innerHTML = `
-      <img class="recipe-photo" src="${r.image}" alt="Verpackung ${recipeItemName}">
-      ${recognizing ? `<div class="recipe-status"><span class="recipe-spinner"></span>Text wird erkannt…</div>` : ''}
-      <textarea class="recipe-text" id="recipeTextArea" placeholder="Zubereitung…">${r.text||''}</textarea>
-      <div class="recipe-actions">
-        <button class="save" id="recipeSaveBtn">Speichern</button>
-        <button class="delete" id="recipeDeleteBtn">Löschen</button>
+  const photosHtml = `
+    <div class="recipe-photos">
+      <div class="recipe-photo-slot">
+        <div class="recipe-photo-label">Vorderseite</div>
+        ${frontImg ? `<img class="recipe-photo small" src="${frontImg}" alt="Vorderseite ${recipeItemName}">` : `<div class="recipe-photo-placeholder">kein Foto</div>`}
+        <input type="file" accept="image/*" id="recipeFrontInput" style="display:none;">
+        <button class="recipe-capture small" id="recipeFrontBtn">📷 ${frontImg?'Ersetzen':'Hinzufügen'}</button>
       </div>
-      ${captureInput}`;
-  }
-  $('#recipeCaptureBtn').addEventListener('click', () => $('#recipeCaptureInput').click());
-  $('#recipeCaptureInput').addEventListener('change', onRecipePhotoChosen);
-  const saveBtn = $('#recipeSaveBtn');
-  if(saveBtn) saveBtn.addEventListener('click', () => {
+      <div class="recipe-photo-slot">
+        <div class="recipe-photo-label">Rückseite · Zubereitung</div>
+        ${backImg ? `<img class="recipe-photo small" src="${backImg}" alt="Rückseite ${recipeItemName}">` : `<div class="recipe-photo-placeholder">kein Foto</div>`}
+        <input type="file" accept="image/*" id="recipeBackInput" style="display:none;">
+        <button class="recipe-capture small" id="recipeBackBtn">📷 ${backImg?'Ersetzen':'Hinzufügen'}</button>
+      </div>
+    </div>`;
+
+  box.innerHTML = `
+    ${!hasAny ? `<div class="recipe-empty">Noch kein Foto hinterlegt. Vorderseite zur Wiedererkennung, Rückseite für die automatische Zubereitung Erkennung.</div>` : ''}
+    ${photosHtml}
+    ${recognizing ? `<div class="recipe-status"><span class="recipe-spinner"></span>Text wird erkannt…</div>` : ''}
+    <textarea class="recipe-text" id="recipeTextArea" placeholder="Zubereitung…">${r.text||''}</textarea>
+    <div class="recipe-actions">
+      <button class="save" id="recipeSaveBtn">Speichern</button>
+      <button class="delete" id="recipeDeleteBtn">Löschen</button>
+    </div>`;
+
+  $('#recipeFrontBtn').addEventListener('click', () => $('#recipeFrontInput').click());
+  $('#recipeFrontInput').addEventListener('change', e => onRecipePhotoChosen(e, 'front'));
+  $('#recipeBackBtn').addEventListener('click', () => $('#recipeBackInput').click());
+  $('#recipeBackInput').addEventListener('change', e => onRecipePhotoChosen(e, 'back'));
+
+  $('#recipeSaveBtn').addEventListener('click', () => {
     const key2 = recipeKey(recipeItemName);
-    if(recipes[key2]){ recipes[key2].text = $('#recipeTextArea').value; recipes[key2].updatedAt = Date.now(); }
+    recipes[key2] = recipes[key2] || {};
+    recipes[key2].text = $('#recipeTextArea').value;
+    recipes[key2].updatedAt = Date.now();
     saveRecipes(); render();
+    if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
   });
-  const delBtn = $('#recipeDeleteBtn');
-  if(delBtn) delBtn.addEventListener('click', () => {
+  $('#recipeDeleteBtn').addEventListener('click', () => {
     const key2 = recipeKey(recipeItemName);
     delete recipes[key2];
     saveRecipes(); render(); renderRecipeBody();
+    if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
   });
 }
 
@@ -800,33 +829,36 @@ function extractZubereitung(text){
   return captured || text.trim();
 }
 
-async function onRecipePhotoChosen(e){
+async function onRecipePhotoChosen(e, slot){
   const file = e.target.files && e.target.files[0];
   if(!file) return;
   const key = recipeKey(recipeItemName);
   const previewUrl = URL.createObjectURL(file);
+  const field = slot === 'front' ? 'imageFront' : 'imageBack';
 
-  // Sofortiges Vorschaubild zeigen, während Texterkennung und Upload laufen
+  // Sofortiges Vorschaubild zeigen, während ggf. Texterkennung und Upload laufen
   recipes[key] = recipes[key] || {};
-  recipes[key].image = previewUrl;
-  renderRecipeBody(true);
+  recipes[key][field] = previewUrl;
+  renderRecipeBody(slot === 'back');
 
-  try{
-    // Texterkennung läuft komplett im Browser, auf Deutsch
-    const result = await Tesseract.recognize(file, 'deu');
-    const rawText = (result && result.data && result.data.text) ? result.data.text.trim() : '';
-    recipes[key].text = extractZubereitung(rawText);
-  }catch(err){
-    // Texterkennung fehlgeschlagen, Feld bleibt leer und ist manuell ausfüllbar
-    recipes[key].text = recipes[key].text || '';
+  if(slot === 'back'){
+    try{
+      // Texterkennung läuft komplett im Browser, auf Deutsch, nur bei der Rückseite
+      const result = await Tesseract.recognize(file, 'deu');
+      const rawText = (result && result.data && result.data.text) ? result.data.text.trim() : '';
+      recipes[key].text = extractZubereitung(rawText);
+    }catch(err){
+      // Texterkennung fehlgeschlagen, Feld bleibt leer bzw. unverändert und ist manuell ausfüllbar
+      recipes[key].text = recipes[key].text || '';
+    }
   }
 
   try{
-    const path = `recipes/${slugify(recipeItemName)}-${Date.now()}.jpg`;
+    const path = `recipes/${slugify(recipeItemName)}-${slot}-${Date.now()}.jpg`;
     const ref = storage.ref().child(path);
     await ref.put(file);
     const url = await ref.getDownloadURL();
-    recipes[key].image = url;
+    recipes[key][field] = url;
   }catch(err){
     // Upload fehlgeschlagen (z. B. offline), Vorschau bleibt lokal sichtbar, Firestore Save folgt später erneut
   }
@@ -834,6 +866,7 @@ async function onRecipePhotoChosen(e){
   recipes[key].updatedAt = Date.now();
   saveRecipes();
   render();
+  if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
   renderRecipeBody();
 }
 function clearDone(){
