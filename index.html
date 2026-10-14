@@ -313,10 +313,25 @@
     <div class="row">
       <h1>Meine <span class="accentword">Listen</span></h1>
       <span class="syncstatus" id="syncStatus1"><span class="pulse"></span>offline</span>
+      <button class="editbtn" id="recipesNavBtn" title="Zubereitungen">📖</button>
       <button class="editbtn" id="editToggle">Bearbeiten</button>
     </div>
   </header>
   <div class="liststack" id="liststack"></div>
+</div>
+
+<!-- ============ ZUBEREITUNGEN ÜBERSICHT ============ -->
+<div id="screenRecipes" class="hidden">
+  <header class="top">
+    <div class="row">
+      <button class="backbtn" id="recipesBackBtn">‹</button>
+      <h1 style="font-size:22px; flex:1;">Zubereitungen</h1>
+    </div>
+  </header>
+  <div style="padding:6px 16px 40px;">
+    <div class="grid" id="recipesGrid" style="grid-template-columns:repeat(3, 1fr);"></div>
+    <div class="empty" id="recipesEmpty" style="display:none; margin-top:10px;">Noch keine Zubereitung hinterlegt. Nimm bei einem Artikel ein Foto der Verpackung auf, dann erscheint er hier.</div>
+  </div>
 </div>
 
 <!-- ============ DETAIL SCREEN ============ -->
@@ -560,6 +575,7 @@ async function loadAll(){
     recipes = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : (typeof raw === 'string' ? (JSON.parse(raw||'{}')) : {});
     if(isTyping()) return;
     if(currentListId) render();
+    if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
   });
 
   updateSyncStatus();
@@ -570,8 +586,39 @@ async function loadAll(){
 function showOverview(){
   currentListId = null;
   $('#screenDetail').classList.add('hidden');
+  $('#screenRecipes').classList.add('hidden');
   $('#screenOverview').classList.remove('hidden');
   renderOverview();
+}
+function showRecipesOverview(){
+  $('#screenOverview').classList.add('hidden');
+  $('#screenDetail').classList.add('hidden');
+  $('#screenRecipes').classList.remove('hidden');
+  renderRecipesOverview();
+}
+function renderRecipesOverview(){
+  const keys = Object.keys(recipes).sort((a,b)=>a.localeCompare(b, 'de'));
+  const grid = $('#recipesGrid');
+  const empty = $('#recipesEmpty');
+  if(keys.length === 0){
+    grid.innerHTML = '';
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+  grid.innerHTML = keys.map(key => {
+    const r = recipes[key];
+    const dbMatch = allDbItems().find(it => recipeKey(it.n) === key);
+    const label = dbMatch ? dbMatch.n : key;
+    const iconOrPhoto = r.image
+      ? `<img src="${r.image}" alt="${label}" style="width:40px;height:40px;object-fit:cover;border-radius:10px;margin-bottom:6px;">`
+      : `<span class="icon">${dbMatch ? dbMatch.i : '📖'}</span>`;
+    return `
+    <div class="card" data-recipe="${label.replace(/"/g,'&quot;')}">
+      ${iconOrPhoto}
+      <span class="name">${label}</span>
+    </div>`;
+  }).join('');
 }
 function openList(id){
   currentListId = id;
@@ -694,7 +741,7 @@ function renderRecipeBody(recognizing){
   const key = recipeKey(recipeItemName);
   const r = recipes[key];
   const captureInput = `
-    <input type="file" accept="image/*" capture="environment" id="recipeCaptureInput" style="display:none;">
+    <input type="file" accept="image/*" id="recipeCaptureInput" style="display:none;">
     <button class="recipe-capture" id="recipeCaptureBtn">📷 ${r ? 'Foto ersetzen' : 'Foto der Verpackung aufnehmen'}</button>`;
 
   if(!r){
@@ -888,6 +935,8 @@ function renderGrid(){
 // ---------- events: overview ----------
 $('#editToggle').addEventListener('click', () => { editMode = !editMode; renderOverview(); });
 $('#backBtn').addEventListener('click', showOverview);
+$('#recipesNavBtn').addEventListener('click', showRecipesOverview);
+$('#recipesBackBtn').addEventListener('click', showOverview);
 
 document.body.addEventListener('click', e => {
   // overview: open list
