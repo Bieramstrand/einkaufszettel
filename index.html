@@ -775,6 +775,31 @@ function renderRecipeBody(recognizing){
   });
 }
 
+// Filtert aus dem gesamten erkannten Verpackungstext nur den Zubereitung Abschnitt heraus
+function extractZubereitung(text){
+  if(!text) return '';
+  const startRe = /zubereitung(sempfehlung|sart|shinweis)?|so wird'?s gemacht|anleitung/i;
+  const stopWords = [
+    'aufbewahrung','lagerung','zutaten','nährwert','naehrwert','allergen',
+    'mindestens haltbar','herkunft','hersteller','verpackt','kontakt',
+    'hinweis','verzehrempfehlung','entsorgung','gtin','ean','vertrieb'
+  ];
+  const lines = text.split(/\n+/).map(l=>l.trim()).filter(Boolean);
+  let startIdx = -1;
+  for(let i=0;i<lines.length;i++){
+    if(startRe.test(lines[i])){ startIdx = i; break; }
+  }
+  if(startIdx === -1) return text.trim(); // nichts gefunden, ganzen Text als Rückfallebene anbieten
+  let endIdx = lines.length;
+  for(let i=startIdx+1;i<lines.length;i++){
+    const low = lines[i].toLowerCase();
+    if(stopWords.some(w => low.includes(w))){ endIdx = i; break; }
+  }
+  let captured = lines.slice(startIdx, endIdx).join('\n');
+  captured = captured.replace(/^zubereitung(sempfehlung|sart|shinweis)?\s*:?\s*\n?/i, '').trim();
+  return captured || text.trim();
+}
+
 async function onRecipePhotoChosen(e){
   const file = e.target.files && e.target.files[0];
   if(!file) return;
@@ -789,7 +814,8 @@ async function onRecipePhotoChosen(e){
   try{
     // Texterkennung läuft komplett im Browser, auf Deutsch
     const result = await Tesseract.recognize(file, 'deu');
-    recipes[key].text = (result && result.data && result.data.text) ? result.data.text.trim() : '';
+    const rawText = (result && result.data && result.data.text) ? result.data.text.trim() : '';
+    recipes[key].text = extractZubereitung(rawText);
   }catch(err){
     // Texterkennung fehlgeschlagen, Feld bleibt leer und ist manuell ausfüllbar
     recipes[key].text = recipes[key].text || '';
