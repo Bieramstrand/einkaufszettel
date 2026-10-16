@@ -1,4 +1,4 @@
-const CACHE_NAME = 'einkaufszettel-v14';
+const CACHE_NAME = 'einkaufszettel-v17';
 const SHELL = [
   './',
   './index.html',
@@ -27,7 +27,10 @@ self.addEventListener('activate', event => {
 // App Hülle: zuerst aus dem Zwischenspeicher, im Hintergrund aktualisieren
 // Fremde Inhalte (z. B. Schriften): Netz zuerst, sonst Zwischenspeicher
 self.addEventListener('fetch', event => {
+  // Uploads (POST/PUT) und Firebase Verbindungen gehen direkt durch, ohne Zwischenspeicher
+  if(event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
+  if(url.hostname.endsWith('googleapis.com') || url.hostname.endsWith('firebaseio.com')) return;
   const isOwnOrigin = url.origin === self.location.origin;
 
   if(isOwnOrigin){
