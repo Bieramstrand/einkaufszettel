@@ -218,6 +218,51 @@
   .card .recipe-badge.has-recipe{background:rgba(231,169,76,0.2); border-color:var(--accent); color:var(--accent);}
 
   .recipe-photo{width:100%; border-radius:14px; margin-bottom:12px; display:block; max-height:260px; object-fit:cover;}
+  /* ---------- Preise und Kassenbon ---------- */
+  .name-col{flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:2px;}
+  .name-col .name{flex:none;}
+  .price-line{
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--accent);
+    cursor:pointer; padding:1px 0;
+  }
+  .price-line.other{color:var(--muted);}
+  .list-item.done .price-line{opacity:.55;}
+  .modal-sheet.tall{max-height:90vh;}
+  .receipt-store{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .receipt-store label{font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--muted);}
+  .receipt-meta{font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--muted); margin:0 0 6px;}
+  .receipt-section{
+    font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--muted);
+    text-transform:uppercase; letter-spacing:1px; margin:16px 0 4px;
+  }
+  .receipt-row{display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-bottom:1px solid var(--line);}
+  .receipt-row:last-child{border-bottom:0;}
+  .receipt-check{width:20px; height:20px; margin-top:9px; accent-color:var(--accent); flex-shrink:0;}
+  .receipt-main{flex:1; min-width:0;}
+  .receipt-name, .receipt-price{
+    background:var(--surface2); border:1px solid var(--line); border-radius:10px; color:var(--text);
+    font-family:'Karla', sans-serif; font-size:16px; padding:8px 10px; outline:0; min-width:0;
+  }
+  .receipt-name{width:100%;}
+  .receipt-store .receipt-name{flex:1;}
+  .receipt-price{width:82px; flex-shrink:0; text-align:right; font-family:'IBM Plex Mono', monospace;}
+  .receipt-name:focus, .receipt-price:focus{border-color:var(--accent);}
+  .receipt-sub{
+    font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--muted);
+    margin-top:4px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;
+  }
+  .receipt-badge{border-radius:10px; padding:1px 7px; border:1px solid var(--line);}
+  .receipt-badge.known{color:var(--accent); border-color:var(--accent);}
+  .receipt-badge.new{color:var(--accent2); border-color:var(--accent2);}
+  .receipt-missing-name{padding-top:9px; font-size:16px;}
+  .receipt-total{font-family:'IBM Plex Mono', monospace; font-size:12.5px; color:var(--accent); margin:14px 0 10px;}
+  .toast{
+    position:fixed; left:50%; bottom:calc(28px + env(safe-area-inset-bottom, 10px));
+    transform:translateX(-50%) translateY(20px); background:var(--accent); color:#1b2b1f;
+    font-family:'Karla', sans-serif; font-weight:700; font-size:14px; padding:10px 18px;
+    border-radius:20px; opacity:0; pointer-events:none; transition:all .25s ease; z-index:80; white-space:nowrap;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
   .recipe-photos{display:flex; gap:10px; margin-bottom:12px;}
   .recipe-photo-slot{flex:1; display:flex; flex-direction:column; align-items:stretch; gap:6px; min-width:0;}
   .recipe-photo-label{
@@ -354,6 +399,8 @@
       <h1 id="detailTitle" style="font-size:22px; flex:1;">Liste</h1>
       <span class="syncstatus" id="syncStatus2"><span class="pulse"></span>offline</span>
       <div class="count" id="openCount">0 offen</div>
+      <button class="backbtn" id="receiptBtn" title="Preise">🧾</button>
+      <input type="file" accept="image/*" multiple id="receiptInput" style="display:none;">
     </div>
   </header>
 
@@ -366,7 +413,7 @@
   </div>
 
   <section>
-    <div class="section-title"><h2>Auf dem Zettel</h2><div class="line"></div></div>
+    <div class="section-title"><h2>Auf dem Zettel</h2><div class="line"></div><span class="count" id="priceTotal" style="display:none;"></span></div>
     <div id="openList"></div>
   </section>
 
@@ -392,6 +439,37 @@
     <button class="modal-cancel" id="moveCancel">Abbrechen</button>
   </div>
 </div>
+
+<div class="modal-overlay hidden" id="receiptChoiceModal">
+  <div class="modal-sheet">
+    <div class="modal-title">Preise</div>
+    <button class="recipe-capture" id="choiceScan">🧾 Kassenbon fotografieren</button>
+    <button class="recipe-capture" id="choiceManual" style="background:transparent; color:var(--text); border:1px solid var(--line);">✎ Preise von Hand eintragen</button>
+    <button class="modal-cancel" id="choiceCancel">Abbrechen</button>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="receiptModal">
+  <div class="modal-sheet tall">
+    <div id="receiptBody"></div>
+    <button class="modal-cancel" id="receiptCancel">Schließen</button>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="priceModal">
+  <div class="modal-sheet">
+    <div class="modal-title" id="priceTitle">Preis</div>
+    <div class="recipe-empty" id="priceHint"></div>
+    <input type="text" inputmode="decimal" class="receipt-name" id="priceInput" placeholder="z. B. 1,29" autocomplete="off" style="font-family:'IBM Plex Mono', monospace; font-size:18px; margin-bottom:12px;">
+    <div class="recipe-actions">
+      <button class="save" id="priceSaveBtn">Speichern</button>
+      <button class="delete" id="priceDeleteBtn">Entfernen</button>
+    </div>
+    <button class="modal-cancel" id="priceCancel">Abbrechen</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
 
 <div class="modal-overlay hidden" id="recipeModal">
   <div class="modal-sheet">
@@ -530,6 +608,8 @@ const recipesRef = db.collection('household').doc('shoppingapp:recipes');
 const storage = firebase.storage();
 let recipes = {}; // Schlüssel: Artikelname klein geschrieben, Wert: {image, text, updatedAt}
 function recipeKey(name){ return name.trim().toLowerCase(); }
+const pricesRef = db.collection('household').doc('shoppingapp:prices');
+let prices = {}; // Schlüssel: Artikelname klein, Wert: {preis, laden, datum, stores:{Laden:{preis,datum}}}
 function slugify(name){
   return name.toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
@@ -554,6 +634,7 @@ async function saveLists(){ try{ await listsRef.set({value:lists}); }catch(e){} 
 async function saveItems(){ try{ await itemsRef.set({value:items}); }catch(e){} }
 async function saveCustom(){ try{ await customRef.set({value:custom}); }catch(e){} }
 async function saveRecipes(){ try{ await recipesRef.set({value:recipes}); }catch(e){} }
+async function savePrices(){ try{ await pricesRef.set({value:prices}); }catch(e){} }
 
 async function loadAll(){
   try{
@@ -588,6 +669,12 @@ async function loadAll(){
     if(isTyping()) return;
     if(currentListId) render();
     if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
+  });
+  pricesRef.onSnapshot(snap => {
+    const raw = snap.exists ? snap.data().value : {};
+    prices = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : (typeof raw === 'string' ? (JSON.parse(raw||'{}')) : {});
+    if(isTyping()) return;
+    if(currentListId) render();
   });
 
   updateSyncStatus();
@@ -929,6 +1016,470 @@ function clearDone(){
   saveItems(); render();
 }
 
+// ---------- Preise: Kassenbon lesen, Preise am Artikel speichern ----------
+function esc(s){
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtEuro(n){
+  return Number(n).toLocaleString('de-DE', {style:'currency', currency:'EUR'});
+}
+function preisText(n){ return Number(n).toFixed(2).replace('.', ','); }
+function parsePreis(v){
+  if(typeof v === 'number') return (isFinite(v) && v > 0) ? Math.round(v * 100) / 100 : null;
+  const t = String(v == null ? '' : v).replace(/[€\s]/g, '').replace(',', '.');
+  const n = parseFloat(t);
+  return (isFinite(n) && n > 0) ? Math.round(n * 100) / 100 : null;
+}
+function heute(){
+  const d = new Date();
+  const z = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+}
+function datumDE(iso){
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : '';
+}
+// Entfernt eine angehängte Mengenangabe wie " (250 g)", die z. B. aus "Was essen wir heute" kommt
+function baseName(n){ return String(n || '').replace(/\s*\([^)]*\)\s*$/, '').trim(); }
+function priceKey(n){ return baseName(n).toLowerCase(); }
+function currentStoreName(){
+  const l = lists.find(x => x.id === currentListId);
+  return l ? l.name : '';
+}
+
+let toastTimer = null;
+function showToast(text){
+  const el = $('#toast');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+function priceInfo(name){
+  const p = prices[priceKey(name)];
+  if(!p) return null;
+  const store = currentStoreName();
+  if(store && p.stores && p.stores[store] && p.stores[store].preis > 0){
+    return {preis: p.stores[store].preis, exakt: true, laden: store};
+  }
+  if(p.preis > 0) return {preis: p.preis, exakt: false, laden: p.laden || ''};
+  return null;
+}
+function setPrice(name, preis, laden, datum){
+  const key = priceKey(name);
+  if(!key || !(preis > 0)) return;
+  const e = prices[key] || {};
+  e.stores = e.stores || {};
+  const d = datum || heute();
+  if(laden) e.stores[laden] = {preis: preis, datum: d};
+  e.preis = preis;
+  e.laden = laden || e.laden || '';
+  e.datum = d;
+  prices[key] = e;
+}
+function removeStorePrice(name, laden){
+  const key = priceKey(name);
+  const e = prices[key];
+  if(!e) return;
+  if(e.stores && laden) delete e.stores[laden];
+  const rest = Object.entries(e.stores || {});
+  if(rest.length === 0){ delete prices[key]; return; }
+  rest.sort((a, b) => String(b[1].datum || '').localeCompare(String(a[1].datum || '')));
+  e.preis = rest[0][1].preis;
+  e.laden = rest[0][0];
+  e.datum = rest[0][1].datum;
+}
+
+function updatePriceTotal(open){
+  const el = $('#priceTotal');
+  if(!el) return;
+  let sum = 0, mit = 0, ohne = 0;
+  open.forEach(it => {
+    const info = priceInfo(it.n);
+    if(info){ sum += info.preis * (it.qty || 1); mit++; } else { ohne++; }
+  });
+  if(mit === 0){ el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.textContent = 'ca. ' + fmtEuro(sum) + (ohne ? ` · ${ohne} ohne Preis` : '');
+}
+
+// ----- einzelner Preis von Hand -----
+let priceModalName = null;
+function openPriceModal(name){
+  priceModalName = name;
+  const info = priceInfo(name);
+  const store = currentStoreName();
+  $('#priceTitle').textContent = baseName(name) || name;
+  $('#priceHint').textContent = store ? `Preis pro Stück bei ${store}` : 'Preis pro Stück';
+  $('#priceInput').value = info ? preisText(info.preis) : '';
+  $('#priceInput').style.borderColor = '';
+  $('#priceDeleteBtn').style.display = (info && info.exakt) ? '' : 'none';
+  $('#priceModal').classList.remove('hidden');
+  setTimeout(() => $('#priceInput').focus(), 60);
+}
+function closePriceModal(){
+  priceModalName = null;
+  $('#priceModal').classList.add('hidden');
+}
+function savePriceFromModal(){
+  const p = parsePreis($('#priceInput').value);
+  if(p === null){
+    $('#priceInput').style.borderColor = 'var(--accent2)';
+    $('#priceInput').focus();
+    return;
+  }
+  setPrice(priceModalName, p, currentStoreName(), heute());
+  savePrices(); render(); closePriceModal();
+}
+function deletePriceFromModal(){
+  removeStorePrice(priceModalName, currentStoreName());
+  savePrices(); render(); closePriceModal();
+}
+
+// ----- Texte vergleichen: Bonzeile zu bekanntem Artikel zuordnen -----
+function normWords(s){
+  return String(s || '').toLowerCase()
+    .replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ß/g, 'ss')
+    .replace(/\d+([.,]\d+)?\s*(kg|g|ml|l|cl|stk|st|x|%)?/g, ' ')
+    .replace(/[^a-z\s]/g, ' ')
+    .split(/\s+/).filter(w => w.length >= 3);
+}
+// Wie stark passen zwei einzelne Wörter zusammen (gleich oder als Teil eines Wortes, z. B. Milch in Vollmilch)
+function wortStaerke(x, y){
+  if(x === y) return 1;
+  const kurz = x.length <= y.length ? x : y;
+  const lang = x.length <= y.length ? y : x;
+  if(kurz.length >= 4 && lang.includes(kurz)) return 0.75 + 0.25 * (kurz.length / lang.length);
+  return 0;
+}
+// Bewertet, wie gut ein Artikelname zur Bonzeile passt: berücksichtigt, wie viel vom Artikel
+// und wie viel von der Bonzeile abgedeckt wird, damit nicht ein einzelnes Wort alles gewinnt
+function similarity(a, b){
+  const A = normWords(a), B = normWords(b);
+  if(!A.length || !B.length) return 0;
+  let kandSumme = 0;
+  B.forEach(y => { let m = 0; A.forEach(x => { m = Math.max(m, wortStaerke(x, y)); }); kandSumme += m; });
+  let bonSumme = 0;
+  A.forEach(x => { let m = 0; B.forEach(y => { m = Math.max(m, wortStaerke(x, y)); }); bonSumme += m; });
+  return (kandSumme / B.length) * (0.4 + 0.6 * (bonSumme / A.length));
+}
+function findBestMatch(name){
+  if(!name) return null;
+  const kandidaten = [];
+  currentItems().forEach(it => kandidaten.push({n: baseName(it.n), bonus: 0.05}));
+  allDbItems().forEach(it => kandidaten.push({n: it.n, bonus: 0}));
+  let best = null, bestScore = 0;
+  for(const c of kandidaten){
+    const sc = similarity(name, c.n);
+    if(sc <= 0) continue;
+    if(sc + c.bonus > bestScore){ bestScore = sc + c.bonus; best = c.n; }
+  }
+  return (best && bestScore >= 0.55) ? best : null;
+}
+
+// ----- Kassenbon: Foto, KI Auswertung, Prüfansicht -----
+let receiptRun = 0;
+let receiptRid = 0;
+let receiptRows = [];     // {id, text, name, preis, menge, include}
+let receiptMissing = [];  // {name, preis}
+let receiptMeta = {laden: '', datum: '', summe: null};
+let receiptMode = 'scan'; // 'scan' oder 'manuell'
+
+function dateiZuBase64(datei){
+  return new Promise((resolve, reject) => {
+    const leser = new FileReader();
+    leser.onload = () => resolve(String(leser.result).split(',')[1]);
+    leser.onerror = () => reject(new Error('Lesen der Datei fehlgeschlagen'));
+    leser.readAsDataURL(datei);
+  });
+}
+function parseJsonLoose(text){
+  let t = String(text || '').replace(/```json|```/g, '').replace(/\[\d{1,2}\]/g, '').trim();
+  const a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if(a === -1 || b === -1 || b < a) throw new Error('Antwort war kein JSON');
+  return JSON.parse(t.slice(a, b + 1));
+}
+
+function buildReceiptPrompt(){
+  const namen = [];
+  const gesehen = new Set();
+  currentItems().map(it => ({n: baseName(it.n)})).concat(allDbItems()).forEach(it => {
+    const k = it.n.toLowerCase();
+    if(k && !gesehen.has(k)){ gesehen.add(k); namen.push(it.n); }
+  });
+  return 'Du bekommst ein Foto (oder mehrere Fotos desselben Bons) von einem Kassenbon aus einem Supermarkt, einer Drogerie oder von einem Markt. Lies den Bon sorgfältig und nutze keine Websuche. ' +
+    'Antworte NUR mit einem JSON Objekt, ohne Markdown, ohne Erklärung, in genau diesem kompakten Format: ' +
+    '{"laden": "Name des Geschäfts oder null", "datum": "YYYY-MM-DD oder null", "summe": Gesamtbetrag des Bons als Zahl mit Punkt oder null, ' +
+    '"pos": [{"t": "Zeile wie gedruckt, höchstens 20 Zeichen", "n": "gängiger deutscher Artikelname in Klartext, Abkürzungen ausgeschrieben, ohne Marke, Menge und Größe, z.B. Vollmilch", ' +
+    '"a": "exakt einer der bekannten Artikel unten, wenn die Position eindeutig dazu passt, sonst null", "m": Anzahl als Ganzzahl, "p": Einzelpreis in Euro als Zahl mit Punkt}]}. ' +
+    'Regeln: Steht eine Zeile wie "2 x 1,29", ist m gleich 2 und p gleich 1.29. Ohne Mengenangabe ist m gleich 1. Bei Artikeln nach Gewicht (Obst, Gemüse, Fleisch, Wurst, Käse) ist p der Betrag der Zeile und m gleich 1. ' +
+    'Gib den Preis an, den die Artikelzeile selbst ausweist. Ignoriere Summenzeilen, Zwischensummen, MwSt, Zahlungsart, Rückgeld, Bonuspunkte, Pfand, Rabatt und Gutscheinzeilen. ' +
+    'Wenn auf den Fotos kein Kassenbon erkennbar ist, antworte mit {"pos": []}. ' +
+    'Bekannte Artikel: ' + namen.join(', ') + '.';
+}
+
+function openReceiptModal(){ $('#receiptModal').classList.remove('hidden'); }
+function closeReceiptModal(){ receiptRun++; $('#receiptModal').classList.add('hidden'); }
+function showReceiptLoading(text){
+  $('#receiptBody').innerHTML = `<div class="recipe-status" style="margin:22px 0;"><span class="recipe-spinner"></span>${esc(text)}</div>`;
+}
+function showReceiptError(text){
+  $('#receiptBody').innerHTML = `
+    <div class="modal-title">Bon lesen</div>
+    <div class="recipe-empty" style="color:var(--accent2);">${esc(text)}</div>
+    <button class="recipe-capture" id="receiptRetry">🧾 Anderes Foto wählen</button>`;
+}
+
+async function startReceiptScan(files){
+  if(!files.length) return;
+  receiptMode = 'scan';
+  const run = ++receiptRun;
+  openReceiptModal();
+  showReceiptLoading('Foto wird vorbereitet…');
+  try{
+    const bloecke = [];
+    let gesamt = 0;
+    for(const f of files){
+      let blob = f;
+      try{ blob = await komprimiereBild(f, 1800, 0.78); }
+      catch(err){ console.error('Komprimierung fehlgeschlagen, Original wird verwendet', err); }
+      const b64 = await dateiZuBase64(blob);
+      gesamt += b64.length;
+      bloecke.push({type: 'image_url', image_url: {url: `data:${blob.type || 'image/jpeg'};base64,${b64}`}});
+    }
+    if(gesamt > 5200000) throw new Error('Die Fotos sind zusammen zu groß. Bitte weniger Fotos auf einmal wählen.');
+    if(run !== receiptRun) return;
+    showReceiptLoading('Bon wird gelesen…');
+
+    let antwortRoh;
+    try{
+      antwortRoh = await fetch('/.netlify/functions/bon-erkennung', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({content: [{type: 'text', text: buildReceiptPrompt()}, ...bloecke]})
+      });
+    }catch(err){
+      throw new Error('Keine Verbindung zum Server. Bitte Internetverbindung prüfen.');
+    }
+    let daten;
+    try{ daten = await antwortRoh.json(); }
+    catch(err){ throw new Error('Keine Antwort vom Server (Zeitüberschreitung?). Bitte erneut versuchen, bei langen Bons am besten nur den oberen Teil fotografieren.'); }
+    if(run !== receiptRun) return;
+    if(!antwortRoh.ok || daten.error){
+      const m = (daten.error && daten.error.message) ? daten.error.message : daten.error;
+      throw new Error(typeof m === 'string' ? m : 'Unbekannter Fehler');
+    }
+    const roh = (daten.choices && daten.choices[0] && daten.choices[0].message) ? daten.choices[0].message.content : '';
+    let erkannt;
+    try{ erkannt = parseJsonLoose(roh); }
+    catch(err){ throw new Error('Der Bon konnte nicht ausgewertet werden. Bitte flach und gut beleuchtet fotografieren.'); }
+    const positionen = Array.isArray(erkannt.pos) ? erkannt.pos : (Array.isArray(erkannt.positionen) ? erkannt.positionen : []);
+    if(positionen.length === 0) throw new Error('Keine Positionen erkannt. Bitte den Bon flach und gut beleuchtet fotografieren.');
+    buildReceiptReview(erkannt, positionen);
+    renderReceiptReview();
+  }catch(err){
+    if(run !== receiptRun) return;
+    showReceiptError(err.message || 'Unbekannter Fehler');
+  }
+}
+
+function missingFromList(matched){
+  const out = [];
+  currentItems().forEach(it => {
+    const k = priceKey(it.n);
+    if(matched.has(k)) return;
+    const info = priceInfo(it.n);
+    if(info && info.exakt) return;
+    if(out.some(m => priceKey(m.name) === k)) return;
+    out.push({name: baseName(it.n), preis: ''});
+  });
+  return out;
+}
+
+function buildReceiptReview(erkannt, positionen){
+  const cur = currentStoreName();
+  let laden = cur;
+  if(erkannt.laden && typeof erkannt.laden === 'string' && /^einkaufsliste$/i.test(cur)) laden = erkannt.laden.trim();
+  const datum = /^\d{4}-\d{2}-\d{2}$/.test(erkannt.datum || '') ? erkannt.datum : heute();
+  receiptMeta = {laden: laden, datum: datum, summe: parsePreis(erkannt.summe)};
+
+  receiptRows = [];
+  const matched = new Set();
+  positionen.forEach(p => {
+    if(!p) return;
+    const text = String(p.t != null ? p.t : (p.text || '')).trim();
+    const klar = String(p.n != null ? p.n : (p.name || '')).trim();
+    const preis = parsePreis(p.p != null ? p.p : p.preis);
+    if(!text && !klar) return;
+    let name = '';
+    const vorschlag = p.a != null ? p.a : p.artikel;
+    if(vorschlag){ const db = findInDb(String(vorschlag)); if(db) name = db.n; }
+    if(!name) name = findBestMatch(klar || text) || klar || text;
+    let menge = parseInt(p.m != null ? p.m : p.menge, 10);
+    if(!(menge > 1) || menge > 20) menge = 1;
+    matched.add(priceKey(name));
+    receiptRows.push({id: ++receiptRid, text: text, name: name, preis: preis ? preisText(preis) : '', menge: menge, include: !!preis});
+  });
+  receiptMissing = missingFromList(matched);
+}
+
+function openManualPrices(){
+  receiptMode = 'manuell';
+  receiptMeta = {laden: currentStoreName(), datum: heute(), summe: null};
+  receiptRows = [];
+  receiptMissing = missingFromList(new Set());
+  openReceiptModal();
+  renderReceiptReview();
+}
+
+function receiptRowHtml(r){
+  const bekannt = !!findInDb((r.name || '').trim());
+  return `<div class="receipt-row" data-rid="${r.id}">
+    <input type="checkbox" class="receipt-check" ${r.include ? 'checked' : ''}>
+    <div class="receipt-main">
+      <input type="text" class="receipt-name" list="knownNames" value="${esc(r.name)}" placeholder="Artikel" autocomplete="off">
+      <div class="receipt-sub">
+        <span class="receipt-badge ${bekannt ? 'known' : 'new'}">${bekannt ? 'bekannt' : 'neu'}</span>
+        ${r.menge > 1 ? `<span>${r.menge}×</span>` : ''}
+        ${r.text ? `<span>${esc(r.text)}</span>` : ''}
+      </div>
+    </div>
+    <input type="text" inputmode="decimal" class="receipt-price" value="${esc(r.preis)}" placeholder="0,00" autocomplete="off">
+  </div>`;
+}
+
+function renderReceiptReview(){
+  const m = receiptMeta;
+  const meta = [];
+  if(receiptMode === 'scan' && m.datum) meta.push(datumDE(m.datum));
+  if(m.summe) meta.push('Bon Summe ' + fmtEuro(m.summe));
+  const namen = [];
+  const gesehen = new Set();
+  allDbItems().forEach(it => { const k = it.n.toLowerCase(); if(!gesehen.has(k)){ gesehen.add(k); namen.push(it.n); } });
+  const titel = receiptMode === 'scan' ? 'Bon prüfen' : 'Preise eintragen';
+  const fehltTitel = receiptMode === 'scan' ? 'Auf deiner Liste, nicht auf dem Bon gefunden' : 'Auf deiner Liste';
+
+  $('#receiptBody').innerHTML = `
+    <div class="modal-title">${titel}</div>
+    <div class="receipt-store"><label for="receiptStore">Laden</label><input type="text" id="receiptStore" class="receipt-name" list="knownStores" value="${esc(m.laden)}" autocomplete="off"></div>
+    <datalist id="knownStores">${lists.map(l => `<option value="${esc(l.name)}"></option>`).join('')}</datalist>
+    <datalist id="knownNames">${namen.map(n => `<option value="${esc(n)}"></option>`).join('')}</datalist>
+    ${meta.length ? `<div class="receipt-meta">${esc(meta.join(' · '))}</div>` : ''}
+    ${receiptMode === 'scan' ? `<div class="receipt-section">Vom Bon erkannt</div>` : ''}
+    <div id="receiptRows">${receiptRows.map(receiptRowHtml).join('')}</div>
+    <button class="recipe-capture small" id="receiptAddRow" style="margin-top:10px;">＋ Weitere Position</button>
+    ${receiptMissing.length ? `<div class="receipt-section">${fehltTitel}</div>
+    <div id="receiptMissingRows">${receiptMissing.map((x, i) => `<div class="receipt-row" data-mi="${i}">
+      <div class="receipt-main"><div class="receipt-missing-name">${esc(x.name)}</div></div>
+      <input type="text" inputmode="decimal" class="receipt-price" value="${esc(x.preis)}" placeholder="0,00" autocomplete="off">
+    </div>`).join('')}</div>` : ''}
+    <div class="receipt-total" id="receiptSum"></div>
+    <div class="recipe-actions"><button class="save" id="receiptSave">Preise speichern</button></div>`;
+  updateReceiptSum();
+}
+
+function updateReceiptSum(){
+  const el = $('#receiptSum');
+  if(!el) return;
+  let sum = 0, n = 0;
+  receiptRows.forEach(r => {
+    if(!r.include) return;
+    const p = parsePreis(r.preis);
+    if(p){ sum += p * (r.menge || 1); n++; }
+  });
+  let t = n ? `${n} Positionen vom Bon, zusammen ${fmtEuro(sum)}` : '';
+  if(n && receiptMeta.summe) t += ` · Bon ${fmtEuro(receiptMeta.summe)}`;
+  el.textContent = t;
+}
+
+function saveReceiptPrices(){
+  const laden = (receiptMeta.laden || '').trim() || currentStoreName();
+  const datum = receiptMeta.datum || heute();
+  let gespeichert = 0, neu = 0;
+  receiptRows.forEach(r => {
+    if(!r.include) return;
+    const name = (r.name || '').trim();
+    const p = parsePreis(r.preis);
+    if(!name || p === null) return;
+    if(!findInDb(name)){ custom.push({n: name, c: 'sonstiges', i: '📝'}); neu++; }
+    setPrice(name, p, laden, datum);
+    gespeichert++;
+  });
+  receiptMissing.forEach(x => {
+    const p = parsePreis(x.preis);
+    if(p === null) return;
+    setPrice(x.name, p, laden, datum);
+    gespeichert++;
+  });
+  if(gespeichert === 0){
+    $('#receiptSum').textContent = 'Noch kein Preis ausgewählt oder eingetragen.';
+    return;
+  }
+  if(neu) saveCustom();
+  savePrices();
+  render();
+  closeReceiptModal();
+  showToast(gespeichert === 1 ? '1 Preis gespeichert' : `${gespeichert} Preise gespeichert`);
+}
+
+// Ereignisse für Preise und Kassenbon
+$('#receiptBtn').addEventListener('click', () => $('#receiptChoiceModal').classList.remove('hidden'));
+$('#choiceCancel').addEventListener('click', () => $('#receiptChoiceModal').classList.add('hidden'));
+$('#receiptChoiceModal').addEventListener('click', e => { if(e.target.id === 'receiptChoiceModal') e.target.classList.add('hidden'); });
+$('#choiceScan').addEventListener('click', () => { $('#receiptChoiceModal').classList.add('hidden'); $('#receiptInput').click(); });
+$('#choiceManual').addEventListener('click', () => { $('#receiptChoiceModal').classList.add('hidden'); openManualPrices(); });
+$('#receiptInput').addEventListener('change', e => {
+  const dateien = Array.from(e.target.files || []);
+  e.target.value = '';
+  startReceiptScan(dateien);
+});
+$('#receiptCancel').addEventListener('click', closeReceiptModal);
+
+$('#receiptBody').addEventListener('input', e => {
+  if(e.target.id === 'receiptStore'){ receiptMeta.laden = e.target.value; return; }
+  const row = e.target.closest('.receipt-row');
+  if(!row) return;
+  if(row.dataset.rid){
+    const r = receiptRows.find(x => String(x.id) === row.dataset.rid);
+    if(!r) return;
+    if(e.target.classList.contains('receipt-name')){
+      r.name = e.target.value;
+      const bekannt = !!findInDb(r.name.trim());
+      const b = row.querySelector('.receipt-badge');
+      if(b){ b.textContent = bekannt ? 'bekannt' : 'neu'; b.className = 'receipt-badge ' + (bekannt ? 'known' : 'new'); }
+    }
+    if(e.target.classList.contains('receipt-price')) r.preis = e.target.value;
+  }else if(row.dataset.mi !== undefined){
+    const x = receiptMissing[Number(row.dataset.mi)];
+    if(x && e.target.classList.contains('receipt-price')) x.preis = e.target.value;
+  }
+  updateReceiptSum();
+});
+$('#receiptBody').addEventListener('change', e => {
+  if(!e.target.classList.contains('receipt-check')) return;
+  const row = e.target.closest('.receipt-row');
+  const r = row && receiptRows.find(x => String(x.id) === row.dataset.rid);
+  if(r){ r.include = e.target.checked; updateReceiptSum(); }
+});
+$('#receiptBody').addEventListener('click', e => {
+  if(e.target.id === 'receiptAddRow'){
+    receiptRows.push({id: ++receiptRid, text: '', name: '', preis: '', menge: 1, include: true});
+    renderReceiptReview();
+    const felder = document.querySelectorAll('#receiptRows .receipt-name');
+    if(felder.length) felder[felder.length - 1].focus();
+    return;
+  }
+  if(e.target.id === 'receiptSave'){ saveReceiptPrices(); return; }
+  if(e.target.id === 'receiptRetry'){ $('#receiptInput').click(); return; }
+});
+
+$('#priceSaveBtn').addEventListener('click', savePriceFromModal);
+$('#priceDeleteBtn').addEventListener('click', deletePriceFromModal);
+$('#priceCancel').addEventListener('click', closePriceModal);
+$('#priceModal').addEventListener('click', e => { if(e.target.id === 'priceModal') closePriceModal(); });
+$('#priceInput').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); savePriceFromModal(); } });
+
 // ---------- render: overview ----------
 function renderOverview(){
   const box = $('#liststack');
@@ -1011,16 +1562,21 @@ function render(){
     doneSection.style.display = 'none';
   }
 
+  updatePriceTotal(open);
   renderChips();
   renderGrid();
 }
 
 function rowHtml(it){
+  const pi = priceInfo(it.n);
+  const priceHtml = pi
+    ? `<span class="price-line ${pi.exakt ? '' : 'other'}" data-price="${esc(it.n)}">${pi.exakt ? fmtEuro(pi.preis) : '≈ ' + fmtEuro(pi.preis) + (pi.laden ? ' (' + esc(pi.laden) + ')' : '')}</span>`
+    : '';
   return `
     <li class="list-item ${it.checked?'done':''}" data-id="${it.id}">
       <span class="dot" data-toggle="${it.id}"></span>
       <span class="icon">${it.i}</span>
-      <span class="name" data-toggle="${it.id}">${it.n}<span class="strike"></span></span>
+      <div class="name-col"><span class="name" data-toggle="${it.id}">${it.n}<span class="strike"></span></span>${priceHtml}</div>
       <span class="qty" data-qty="${it.id}" style="${it.qty>1?'':'opacity:.55'}">×${it.qty}</span>
       <button class="recipe-btn ${recipes[recipeKey(it.n)]?'has-recipe':''}" data-recipe="${it.n.replace(/"/g,'&quot;')}" title="Zubereitung">📖</button>
       <button class="move" data-move="${it.id}" title="Verschieben">⇄</button>
@@ -1092,6 +1648,8 @@ document.body.addEventListener('click', e => {
   const mvt = e.target.closest('[data-movetarget]');
   if(mvt){ moveItemToList(moveItemId, mvt.dataset.movetarget); closeMoveModal(); return; }
   if(e.target.id === 'moveCancel' || e.target.id === 'moveModal'){ closeMoveModal(); return; }
+  const pr = e.target.closest('[data-price]');
+  if(pr){ openPriceModal(pr.dataset.price); return; }
   const rc = e.target.closest('[data-recipe]');
   if(rc){ openRecipeModal(rc.dataset.recipe); return; }
   if(e.target.id === 'recipeCancel' || e.target.id === 'recipeModal'){ closeRecipeModal(); return; }
