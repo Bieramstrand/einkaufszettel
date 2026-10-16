@@ -795,6 +795,7 @@ function renderRecipeBody(recognizing){
     recipes[key2].updatedAt = Date.now();
     saveRecipes(); render();
     if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
+    closeRecipeModal();
   });
   $('#recipeDeleteBtn').addEventListener('click', () => {
     const key2 = recipeKey(recipeItemName);
@@ -829,45 +830,99 @@ function extractZubereitung(text){
   return captured || text.trim();
 }
 
-async function onRecipePhotoChosen(e, slot){
-  const file = e.target.files && e.target.files[0];
-  if(!file) return;
-  const key = recipeKey(recipeItemName);
-  const previewUrl = URL.createObjectURL(file);
-  const field = slot === 'front' ? 'imageFront' : 'imageBack';
+// Verkleinert Fotos vor Texterkennung und Upload (iPhone Fotos sind oft mehrere MB groß).
+// 2000px Breite reicht, damit kleine Schrift auf der Verpackung noch gut lesbar bleibt.
+function komprimiereBild(datei, maxBreite = 2000, qualitaet = 0.85){
+  return new Promise((resolve, reject) => {
+    const bild = new Image();
+    const objektUrl = URL.createObjectURL(datei);
+    bild.onload = () => {
+      let breite = bild.width;
+      let hoehe = bild.height;
+      if(breite > maxBreite){
+        hoehe = Math.round(hoehe * (maxBreite / breite));
+        breite = maxBreite;
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = breite;
+      canvas.height = hoehe;
+      canvas.getContext('2d').drawImage(bild, 0, 0, breite, hoehe);
+      canvas.toBlob((blob) => {
+        URL.revokeObjectURL(objektUrl);
+        if(blob) resolve(blob); else reject(new Error('Komprimierung fehlgeschlagen'));
+      }, 'image/jpeg', qualitaet);
+    };
+    bild.onerror = () => { URL.revokeObjectURL(objektUrl); reject(new Error('Bild konnte nicht gelesen werden')); };
+    bild.src = objektUrl;
+  });
+}
 
-  // Sofortiges Vorschaubild zeigen, während ggf. Texterkennung und Upload laufen
+async function onRecipePhotoChosen(e, slot){
+  const original = e.target.files && e.target.files[0];
+  if(!original) return;
+  const key = recipeKey(recipeItemName);
+  const field = slot === 'front' ? 'imageFront' : 'imageBack';
   recipes[key] = recipes[key] || {};
+  const vorherigerWert = recipes[key][field] || null; // falls Upload fehlschlägt, wird darauf zurückgesetzt
+
+  // Verkleinertes JPEG für Vorschau, Texterkennung und Upload, bei Fehler das Original
+  let file = original;
+  try{ file = await komprimiereBild(original); }
+  catch(err){ console.error('Komprimierung fehlgeschlagen, Original wird verwendet', err); }
+
+  const previewUrl = URL.createObjectURL(file);
+  // Nur für die aktuelle Ansicht, diese Adresse wird NICHT dauerhaft gespeichert
   recipes[key][field] = previewUrl;
   renderRecipeBody(slot === 'back');
 
+  let erkannterText = null;
   if(slot === 'back'){
     try{
       // Texterkennung läuft komplett im Browser, auf Deutsch, nur bei der Rückseite
       const result = await Tesseract.recognize(file, 'deu');
       const rawText = (result && result.data && result.data.text) ? result.data.text.trim() : '';
-      recipes[key].text = extractZubereitung(rawText);
+      erkannterText = extractZubereitung(rawText);
     }catch(err){
-      // Texterkennung fehlgeschlagen, Feld bleibt leer bzw. unverändert und ist manuell ausfüllbar
-      recipes[key].text = recipes[key].text || '';
+      // Texterkennung fehlgeschlagen, kein Abbruch, Text bleibt wie er war
     }
   }
 
+  let uploadErfolgreich = false;
+  let uploadFehler = null;
   try{
-    const path = `recipes/${slugify(recipeItemName)}-${slot}-${Date.now()}.jpg`;
+    // gleicher Ordner wie bei "Was essen wir heute", dort funktionieren Uploads nachweislich
+    const path = `essenapp/zubereitung/${slugify(recipeItemName)}-${slot}-${Date.now()}.jpg`;
     const ref = storage.ref().child(path);
-    await ref.put(file);
+    await ref.put(file, { contentType: file.type || 'image/jpeg' });
     const url = await ref.getDownloadURL();
     recipes[key][field] = url;
+    uploadErfolgreich = true;
   }catch(err){
-    // Upload fehlgeschlagen (z. B. offline), Vorschau bleibt lokal sichtbar, Firestore Save folgt später erneut
+    // Upload fehlgeschlagen (z. B. offline oder fehlende Berechtigung):
+    // alten Wert wiederherstellen, statt eine nach dem Neuladen kaputte Vorschau zu speichern
+    console.error('Foto Upload fehlgeschlagen', err);
+    uploadFehler = err;
+    recipes[key][field] = vorherigerWert;
   }
 
+  if(erkannterText !== null) recipes[key].text = erkannterText;
   recipes[key].updatedAt = Date.now();
-  saveRecipes();
+
+  if(uploadErfolgreich || erkannterText !== null){
+    saveRecipes();
+  }
   render();
   if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
   renderRecipeBody();
+
+  if(!uploadErfolgreich){
+    const grund = uploadFehler ? (uploadFehler.code || uploadFehler.message || 'unbekannter Fehler') : 'unbekannter Fehler';
+    const hinweis = document.createElement('div');
+    hinweis.className = 'recipe-status';
+    hinweis.style.color = 'var(--accent2)';
+    hinweis.textContent = 'Foto konnte nicht gespeichert werden (' + grund + ').';
+    $('#recipeBody').prepend(hinweis);
+  }
 }
 function clearDone(){
   items = items.filter(x=> !(x.listId===currentListId && x.checked));
