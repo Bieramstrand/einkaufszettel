@@ -163,7 +163,7 @@
   }
   .list-items{list-style:none; margin:0; padding:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--line);}
   .list-item{
-    display:flex; align-items:center; gap:12px;
+    display:flex; align-items:center; gap:10px;
     background:var(--surface); padding:13px 12px; border-bottom:1px solid var(--line);
   }
   .list-item:last-child{border-bottom:0;}
@@ -179,18 +179,25 @@
   .list-item .icon{font-size:19px; width:22px; text-align:center; flex-shrink:0;}
   .list-item .name{flex:1; font-size:16px; position:relative; cursor:pointer;}
   .list-item.done .name{color:var(--muted);}
-  .list-item .strike{
-    position:absolute; left:-2px; right:-2px; top:50%; height:2px;
-    background:var(--accent2); transform:scaleX(0); transform-origin:left;
-    transition:transform 0.32s cubic-bezier(.6,0,.2,1); border-radius:2px;
-    box-shadow:0 3px 0 -1px rgba(194,84,43,0.35);
+  /* Durchstreichen: jede Textzeile bekommt ihre eigene Linie, auch bei Umbruch auf zwei Zeilen */
+  .list-item .name .nt{
+    background-image:linear-gradient(var(--accent2), var(--accent2));
+    background-repeat:no-repeat;
+    background-position:0 56%;
+    background-size:0% 2px;
+    transition:background-size 0.32s cubic-bezier(.6,0,.2,1);
+    -webkit-box-decoration-break:clone;
+    box-decoration-break:clone;
   }
-  .list-item.done .strike{transform:scaleX(1) rotate(-0.6deg);}
+  .list-item.done .name .nt{background-size:100% 2px;}
   .qty{
-    font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--accent);
-    background:rgba(231,169,76,0.12); border:1px solid rgba(231,169,76,0.35);
-    border-radius:20px; padding:3px 9px; cursor:pointer; flex-shrink:0;
+    font-family:'IBM Plex Mono', monospace; font-size:15px; font-weight:500; color:var(--accent);
+    background:rgba(231,169,76,0.14); border:1px solid rgba(231,169,76,0.65);
+    border-radius:20px; padding:5px 11px; min-width:46px; text-align:center;
+    cursor:pointer; flex-shrink:0; line-height:1.2;
   }
+  .qty.multi{background:var(--accent); color:#1b2b1f; border-color:var(--accent); font-weight:700;}
+  .list-item.done .qty{opacity:.55;}
   .remove{
     background:transparent; border:0; color:var(--muted); font-size:18px; line-height:1;
     padding:4px 2px; cursor:pointer; flex-shrink:0;
@@ -218,6 +225,19 @@
   .card .recipe-badge.has-recipe{background:rgba(231,169,76,0.2); border-color:var(--accent); color:var(--accent);}
 
   .recipe-photo{width:100%; border-radius:14px; margin-bottom:12px; display:block; max-height:260px; object-fit:cover;}
+  /* ---------- Eigene Artikel verwalten ---------- */
+  .custom-row{display:flex; align-items:flex-start; gap:10px; padding:9px 0; border-bottom:1px solid var(--line);}
+  .custom-row:last-child{border-bottom:0;}
+  .custom-icon{font-size:20px; width:24px; text-align:center; padding-top:5px; flex-shrink:0;}
+  .custom-main{flex:1; min-width:0;}
+  .custom-name{font-size:16px; padding-top:4px; word-break:break-word;}
+  .custom-cat{margin-top:6px; padding:6px 8px !important;}
+  .custom-del{
+    background:transparent; border:1px solid var(--line); color:var(--muted); border-radius:12px;
+    min-width:36px; height:36px; font-size:18px; cursor:pointer; padding:0 10px;
+    font-family:'Karla', sans-serif; flex-shrink:0;
+  }
+  .custom-del.confirm{color:var(--accent2); border-color:var(--accent2); font-size:13px; font-weight:700;}
   /* ---------- Preise und Kassenbon ---------- */
   .name-col{flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:2px;}
   .name-col .name{flex:none;}
@@ -424,7 +444,7 @@
   </section>
 
   <section>
-    <div class="section-title"><h2>Vorrat durchstöbern</h2><div class="line"></div></div>
+    <div class="section-title"><h2>Vorrat durchstöbern</h2><div class="line"></div><button class="editbtn" id="manageCustomBtn" style="display:none; padding:5px 11px; font-size:12px;">✎ Eigene</button></div>
     <div class="chips" id="catChips"></div>
     <div class="grid" id="dbGrid"></div>
   </section>
@@ -437,6 +457,16 @@
     <div class="modal-title">Verschieben nach…</div>
     <div id="moveListOptions"></div>
     <button class="modal-cancel" id="moveCancel">Abbrechen</button>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="customModal">
+  <div class="modal-sheet tall">
+    <div class="modal-title">Eigene Artikel</div>
+    <div class="recipe-empty" style="margin-bottom:10px;">Alle Artikel, die ihr selbst eingetragen habt. Mit der Auswahl änderst du die Kategorie, mit × entfernst du einen Artikel aus der Datenbank. Bereits eingetragene Preise und Zubereitungen bleiben erhalten.</div>
+    <input type="text" class="receipt-name" id="customSearch" placeholder="Eigene Artikel suchen…" autocomplete="off" style="margin-bottom:6px;">
+    <div id="customBody"></div>
+    <button class="modal-cancel" id="customCancel">Schließen</button>
   </div>
 </div>
 
@@ -1480,6 +1510,88 @@ $('#priceCancel').addEventListener('click', closePriceModal);
 $('#priceModal').addEventListener('click', e => { if(e.target.id === 'priceModal') closePriceModal(); });
 $('#priceInput').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); savePriceFromModal(); } });
 
+// ---------- Eigene Artikel verwalten ----------
+let pendingCustomDel = null;
+let pendingCustomTimer = null;
+
+function openCustomManager(){
+  pendingCustomDel = null;
+  $('#customSearch').value = '';
+  renderCustomManager();
+  $('#customModal').classList.remove('hidden');
+}
+function closeCustomManager(){
+  pendingCustomDel = null;
+  clearTimeout(pendingCustomTimer);
+  $('#customModal').classList.add('hidden');
+}
+function customRowHtml(it){
+  const optionen = CATS.map(c => `<option value="${c.k}" ${c.k === it.c ? 'selected' : ''}>${c.i} ${c.n}</option>`).join('');
+  const warte = pendingCustomDel === it.n;
+  return `<div class="custom-row" data-cn="${esc(it.n)}">
+    <span class="custom-icon">${esc(it.i)}</span>
+    <div class="custom-main">
+      <div class="custom-name">${esc(it.n)}</div>
+      <select class="receipt-name custom-cat">${optionen}</select>
+    </div>
+    <button class="custom-del ${warte ? 'confirm' : ''}" data-cdel="${esc(it.n)}">${warte ? 'Löschen?' : '×'}</button>
+  </div>`;
+}
+function renderCustomManager(){
+  const q = $('#customSearch').value.trim().toLowerCase();
+  const liste = custom.slice()
+    .sort((a, b) => a.n.localeCompare(b.n, 'de'))
+    .filter(it => !q || it.n.toLowerCase().includes(q));
+  $('#customBody').innerHTML = liste.length
+    ? liste.map(customRowHtml).join('')
+    : `<div class="recipe-empty">${custom.length ? 'Kein Treffer.' : 'Noch keine eigenen Artikel.'}</div>`;
+}
+function deleteCustomItem(name){
+  custom = custom.filter(it => it.n !== name);
+  pendingCustomDel = null;
+  saveCustom();
+  renderCustomManager();
+  render();
+  showToast(`„${name}" gelöscht`);
+}
+function changeCustomCategory(name, neueKategorie){
+  const it = custom.find(x => x.n === name);
+  if(!it || !catMap[neueKategorie]) return;
+  const alt = it.c;
+  it.c = neueKategorie;
+  // Standard Symbol (Notizzettel oder Symbol der alten Kategorie) passend zur neuen Kategorie wechseln
+  if(it.i === '📝' || (catMap[alt] && it.i === catMap[alt].i)) it.i = catMap[neueKategorie].i;
+  // Zeilen mit diesem Namen, die schon auf Listen stehen, mitziehen
+  let geaendert = false;
+  items.forEach(x => {
+    if(x.n.toLowerCase() === name.toLowerCase()){ x.c = neueKategorie; x.i = it.i; geaendert = true; }
+  });
+  saveCustom();
+  if(geaendert) saveItems();
+  render();
+  renderCustomManager();
+}
+
+$('#manageCustomBtn').addEventListener('click', openCustomManager);
+$('#customCancel').addEventListener('click', closeCustomManager);
+$('#customModal').addEventListener('click', e => { if(e.target.id === 'customModal') closeCustomManager(); });
+$('#customSearch').addEventListener('input', renderCustomManager);
+$('#customBody').addEventListener('click', e => {
+  const b = e.target.closest('.custom-del');
+  if(!b) return;
+  const name = b.dataset.cdel;
+  if(pendingCustomDel === name){ clearTimeout(pendingCustomTimer); deleteCustomItem(name); return; }
+  pendingCustomDel = name;           // erster Tipp: nachfragen, zweiter Tipp löscht
+  renderCustomManager();
+  clearTimeout(pendingCustomTimer);
+  pendingCustomTimer = setTimeout(() => { pendingCustomDel = null; renderCustomManager(); }, 3000);
+});
+$('#customBody').addEventListener('change', e => {
+  if(!e.target.classList.contains('custom-cat')) return;
+  const row = e.target.closest('.custom-row');
+  if(row) changeCustomCategory(row.dataset.cn, e.target.value);
+});
+
 // ---------- render: overview ----------
 function renderOverview(){
   const box = $('#liststack');
@@ -1563,6 +1675,11 @@ function render(){
   }
 
   updatePriceTotal(open);
+  const eigeneBtn = $('#manageCustomBtn');
+  if(eigeneBtn){
+    eigeneBtn.style.display = custom.length ? '' : 'none';
+    eigeneBtn.textContent = '✎ Eigene ' + custom.length;
+  }
   renderChips();
   renderGrid();
 }
@@ -1576,8 +1693,8 @@ function rowHtml(it){
     <li class="list-item ${it.checked?'done':''}" data-id="${it.id}">
       <span class="dot" data-toggle="${it.id}"></span>
       <span class="icon">${it.i}</span>
-      <div class="name-col"><span class="name" data-toggle="${it.id}">${it.n}<span class="strike"></span></span>${priceHtml}</div>
-      <span class="qty" data-qty="${it.id}" style="${it.qty>1?'':'opacity:.55'}">×${it.qty}</span>
+      <div class="name-col"><span class="name" data-toggle="${it.id}"><span class="nt">${it.n}</span></span>${priceHtml}</div>
+      <span class="qty ${it.qty>1?'multi':''}" data-qty="${it.id}">×${it.qty}</span>
       <button class="recipe-btn ${recipes[recipeKey(it.n)]?'has-recipe':''}" data-recipe="${it.n.replace(/"/g,'&quot;')}" title="Zubereitung">📖</button>
       <button class="move" data-move="${it.id}" title="Verschieben">⇄</button>
       <button class="remove" data-remove="${it.id}">×</button>
@@ -1592,6 +1709,7 @@ function renderChips(){
 }
 function renderGrid(){
   const grid = $('#dbGrid');
+  if(activeCat && !allDbItems().some(it => it.c === activeCat)) activeCat = null;
   const cat = activeCat || CATS[0].k;
   const dbItems = allDbItems().filter(it => it.c === cat);
   const inListNames = new Set(currentItems().filter(x=>!x.checked).map(x=>x.n.toLowerCase()));
