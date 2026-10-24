@@ -1,4 +1,4 @@
-const CACHE_NAME = 'einkaufszettel-v23';
+const CACHE_NAME = 'einkaufszettel-v24';
 const SHELL = [
   './',
   './index.html',
