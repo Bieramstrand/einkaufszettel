@@ -163,8 +163,8 @@
   }
   .list-items{list-style:none; margin:0; padding:0; border-radius:var(--radius); overflow:hidden; border:1px solid var(--line);}
   .list-item{
-    display:flex; align-items:center; gap:10px;
-    background:var(--surface); padding:13px 12px; border-bottom:1px solid var(--line);
+    display:flex; align-items:center; gap:8px;
+    background:var(--surface); padding:13px 10px; border-bottom:1px solid var(--line);
   }
   .list-item:last-child{border-bottom:0;}
   .list-item .dot{
@@ -176,7 +176,7 @@
     content:"✓"; position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
     font-size:13px; color:#1b2b1f; font-weight:700;
   }
-  .list-item .icon{font-size:19px; width:22px; text-align:center; flex-shrink:0;}
+  .list-item .icon{font-size:18px; width:20px; text-align:center; flex-shrink:0;}
   .list-item .name{flex:1; font-size:16px; position:relative; cursor:pointer;}
   .list-item.done .name{color:var(--muted);}
   /* Durchstreichen: jede Textzeile bekommt ihre eigene Linie, auch bei Umbruch auf zwei Zeilen */
@@ -193,7 +193,7 @@
   .qty{
     font-family:'IBM Plex Mono', monospace; font-size:15px; font-weight:500; color:var(--accent);
     background:rgba(231,169,76,0.14); border:1px solid rgba(231,169,76,0.65);
-    border-radius:20px; padding:5px 11px; min-width:46px; text-align:center;
+    border-radius:20px; padding:5px 9px; min-width:42px; text-align:center;
     cursor:pointer; flex-shrink:0; line-height:1.2;
   }
   .qty.multi{background:var(--accent); color:#1b2b1f; border-color:var(--accent); font-weight:700;}
@@ -204,13 +204,13 @@
   }
   .move{
     background:transparent; border:1px solid var(--line); color:var(--muted);
-    width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    width:25px; height:25px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     font-size:13px; cursor:pointer; flex-shrink:0; padding:0;
   }
   .move:active{background:var(--surface2); color:var(--accent);}
   .recipe-btn{
     background:transparent; border:1px solid var(--line); color:var(--muted);
-    width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    width:25px; height:25px; border-radius:50%; display:flex; align-items:center; justify-content:center;
     font-size:13px; cursor:pointer; flex-shrink:0; padding:0;
   }
   .recipe-btn.has-recipe{background:rgba(231,169,76,0.15); border-color:var(--accent); color:var(--accent);}
@@ -263,6 +263,28 @@
     position:fixed; left:0; right:0; bottom:calc(18px + env(safe-area-inset-bottom, 0px)); z-index:91;
     text-align:center; font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--muted); pointer-events:none;
   }
+  /* ---------- Artikelseite ---------- */
+  .art-btn{
+    background:transparent; border:1px solid var(--line); color:var(--muted);
+    width:25px; height:25px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:12px; cursor:pointer; flex-shrink:0; padding:0; overflow:hidden;
+  }
+  .art-btn.has-article{border-color:var(--accent);}
+  .art-btn img{width:100%; height:100%; object-fit:cover; display:block;}
+  .art-btn:active{background:var(--surface2);}
+  .article-wrap{padding:6px 16px 60px;}
+  .article-photo-box{
+    width:100%; aspect-ratio:4 / 3; background:var(--surface); border:1px solid var(--line);
+    border-radius:var(--radius); overflow:hidden; display:flex; align-items:center; justify-content:center;
+  }
+  .article-photo{width:100%; height:100%; object-fit:contain; display:block; cursor:zoom-in;}
+  .article-photo-empty{text-align:center; color:var(--muted); font-size:14px; line-height:1.6;}
+  .article-price-row{
+    display:flex; justify-content:space-between; gap:10px; padding:9px 0;
+    border-bottom:1px solid var(--line); font-size:15px;
+  }
+  .article-price-row:last-child{border-bottom:0;}
+  .article-price-row span:last-child{font-family:'IBM Plex Mono', monospace; color:var(--accent); font-size:13px; padding-top:2px;}
   /* ---------- Preise und Kassenbon ---------- */
   .name-col{flex:1; min-width:0; display:flex; flex-direction:column; align-items:flex-start; gap:2px;}
   .name-col .name{flex:none;}
@@ -423,6 +445,18 @@
   <div class="version-tag" data-version></div>
 </div>
 
+<!-- ============ ARTIKELSEITE ============ -->
+<div id="screenArticle" class="hidden">
+  <header class="top">
+    <div class="row">
+      <button class="backbtn" id="articleBackBtn">‹</button>
+      <h1 id="articleTitle" style="font-size:22px; flex:1;">Artikel</h1>
+    </div>
+  </header>
+  <div class="article-wrap" id="articleBody"></div>
+  <input type="file" accept="image/*" id="articleFileInput" style="display:none;">
+</div>
+
 <!-- ============ ZUBEREITUNGEN ÜBERSICHT ============ -->
 <div id="screenRecipes" class="hidden">
   <header class="top">
@@ -547,7 +581,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <script>
 // Versionsnummer: bei jedem Update mit CACHE_NAME in sw.js (einkaufszettel-vNN) hochzählen
-const APP_VERSION = '24';
+const APP_VERSION = '26';
 
 const CATS = [
   {k:'obst', n:'Obst & Gemüse', i:'🍏'},
@@ -670,6 +704,30 @@ const listsRef = db.collection('household').doc('shoppingapp:lists');
 const itemsRef = db.collection('household').doc('shoppingapp:items');
 const customRef = db.collection('household').doc('shoppingapp:custom');
 const recipesRef = db.collection('household').doc('shoppingapp:recipes');
+const articlesRef = db.collection('household').doc('shoppingapp:articles');
+let articles = {}; // Schlüssel: Listen ID und Artikelname ohne Menge ("id::name"), Wert: {image, note, updatedAt}
+const geladen = {lists: false, items: false, articles: false};
+function articleKey(name, listId){ return `${listId}::${priceKey(name)}`; }
+
+// Einmalig: Bilder und Notizen der ersten Version (ohne Zuordnung zu einem Laden) werden den Listen
+// zugeordnet, in denen der Artikel gerade steht. Danach gelten sie nur noch dort.
+function maybeMigrateArticles(){
+  if(!(geladen.lists && geladen.items && geladen.articles)) return;
+  const alt = Object.keys(articles).filter(k => !k.includes('::'));
+  if(!alt.length) return;
+  let geaendert = false;
+  alt.forEach(k => {
+    const listen = new Set(items.filter(i => priceKey(i.n) === k).map(i => i.listId));
+    if(!listen.size) return; // kein passender Artikel mehr auf einer Liste, Eintrag bleibt unangetastet
+    listen.forEach(lid => {
+      const nk = `${lid}::${k}`;
+      if(!articles[nk]) articles[nk] = JSON.parse(JSON.stringify(articles[k]));
+    });
+    delete articles[k];
+    geaendert = true;
+  });
+  if(geaendert){ saveArticles(); if(currentListId) render(); }
+}
 const storage = firebase.storage();
 let recipes = {}; // Schlüssel: Artikelname klein geschrieben, Wert: {image, text, updatedAt}
 function recipeKey(name){ return name.trim().toLowerCase(); }
@@ -699,6 +757,7 @@ async function saveLists(){ try{ await listsRef.set({value:lists}); }catch(e){} 
 async function saveItems(){ try{ await itemsRef.set({value:items}); }catch(e){} }
 async function saveCustom(){ try{ await customRef.set({value:custom}); }catch(e){} }
 async function saveRecipes(){ try{ await recipesRef.set({value:recipes}); }catch(e){} }
+async function saveArticles(){ try{ await articlesRef.set({value:articles}); }catch(e){} }
 async function savePrices(){ try{ await pricesRef.set({value:prices}); }catch(e){} }
 
 async function loadAll(){
@@ -713,6 +772,7 @@ async function loadAll(){
 
   listsRef.onSnapshot(snap => {
     lists = snap.exists ? parseValue(snap.data().value) : [];
+    geladen.lists = true; maybeMigrateArticles();
     if(isTyping()) return;
     if(currentListId && !lists.find(l=>l.id===currentListId)) { showOverview(); return; }
     if(currentListId){ const l = lists.find(x=>x.id===currentListId); if(l) $('#detailTitle').textContent = l.name; }
@@ -720,6 +780,7 @@ async function loadAll(){
   });
   itemsRef.onSnapshot(snap => {
     items = snap.exists ? parseValue(snap.data().value) : [];
+    geladen.items = true; maybeMigrateArticles();
     if(isTyping()) return;
     if(currentListId) render(); else renderOverview();
   });
@@ -735,6 +796,15 @@ async function loadAll(){
     if(currentListId) render();
     if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
   });
+  articlesRef.onSnapshot(snap => {
+    const raw = snap.exists ? snap.data().value : {};
+    articles = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : (typeof raw === 'string' ? (JSON.parse(raw||'{}')) : {});
+    geladen.articles = true; maybeMigrateArticles();
+    if(isTyping()) return;
+    if(currentListId) render();
+    const tippt = document.activeElement && document.activeElement.id === 'articleNote';
+    if(articleName && !tippt && !$('#screenArticle').classList.contains('hidden')) renderArticle();
+  });
   pricesRef.onSnapshot(snap => {
     const raw = snap.exists ? snap.data().value : {};
     prices = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : (typeof raw === 'string' ? (JSON.parse(raw||'{}')) : {});
@@ -749,12 +819,16 @@ async function loadAll(){
 // ---------- navigation ----------
 function showOverview(){
   currentListId = null;
+  articleName = null;
+  $('#screenArticle').classList.add('hidden');
   $('#screenDetail').classList.add('hidden');
   $('#screenRecipes').classList.add('hidden');
   $('#screenOverview').classList.remove('hidden');
   renderOverview();
 }
 function showRecipesOverview(){
+  articleName = null;
+  $('#screenArticle').classList.add('hidden');
   $('#screenOverview').classList.add('hidden');
   $('#screenDetail').classList.add('hidden');
   $('#screenRecipes').classList.remove('hidden');
@@ -790,6 +864,8 @@ function openList(id){
   const l = lists.find(x=>x.id===id);
   if(!l) return;
   $('#detailTitle').textContent = l.name;
+  articleName = null;
+  $('#screenArticle').classList.add('hidden');
   $('#screenOverview').classList.add('hidden');
   $('#screenDetail').classList.remove('hidden');
   activeCat = null;
@@ -809,8 +885,11 @@ async function createList(name){
 async function deleteList(id){
   lists = lists.filter(x=>x.id!==id);
   items = items.filter(x=>x.listId!==id);
+  const betroffen = Object.keys(articles).filter(k => k.startsWith(id + '::'));
+  betroffen.forEach(k => delete articles[k]);
   await saveLists();
   await saveItems();
+  if(betroffen.length) await saveArticles();
   renderOverview();
 }
 function moveListUp(id){
@@ -882,9 +961,15 @@ function closeMoveModal(){
 function moveItemToList(itemId, targetListId){
   const it = items.find(x=>x.id===itemId);
   if(!it) return;
+  // Bild und Notiz in die Zielliste mitnehmen, falls dort noch keine eigenen stehen (in der alten Liste bleiben sie)
+  const von = articleKey(it.n, it.listId), nach = articleKey(it.n, targetListId);
+  let kopiert = false;
+  if(articles[von] && !articles[nach]){ articles[nach] = JSON.parse(JSON.stringify(articles[von])); kopiert = true; }
   it.listId = targetListId;
   it.checked = false;
-  saveItems(); render();
+  saveItems();
+  if(kopiert) saveArticles();
+  render();
 }
 
 // ---------- Zubereitung: Foto + automatische Texterkennung, hängt am Produktnamen ----------
@@ -1733,12 +1818,21 @@ function renameCustomItem(alt, neuRoh){
   if(pAlt !== pNeu && prices[pAlt] && !prices[pNeu]){ prices[pNeu] = prices[pAlt]; delete prices[pAlt]; preise = true; }
   const rAlt = recipeKey(alt), rNeu = recipeKey(neu);
   if(rAlt !== rNeu && recipes[rAlt] && !recipes[rNeu]){ recipes[rNeu] = recipes[rAlt]; delete recipes[rAlt]; rezepte = true; }
+  let artikelBilder = false;
+  if(pAlt !== pNeu){
+    Object.keys(articles).forEach(k => {
+      if(!k.endsWith('::' + pAlt)) return;
+      const nk = k.slice(0, k.length - pAlt.length) + pNeu;
+      if(!articles[nk]){ articles[nk] = articles[k]; delete articles[k]; artikelBilder = true; }
+    });
+  }
 
   it.n = neu;
   saveCustom();
   if(zeilen) saveItems();
   if(preise) savePrices();
   if(rezepte) saveRecipes();
+  if(artikelBilder) saveArticles();
   return {ok: true};
 }
 function commitCustomEdit(){
@@ -1787,6 +1881,141 @@ $('#customBody').addEventListener('change', e => {
   if(!e.target.classList.contains('custom-cat')) return;
   const row = e.target.closest('.custom-row');
   if(row) changeCustomCategory(row.dataset.cn, e.target.value);
+});
+
+// ---------- Artikelseite: Bild, Notiz, Preise ----------
+let articleName = null;
+let articleListId = null;
+function articleVisible(){ return !$('#screenArticle').classList.contains('hidden'); }
+
+function openArticle(name){
+  articleName = name;
+  articleListId = currentListId;
+  $('#screenDetail').classList.add('hidden');
+  $('#screenOverview').classList.add('hidden');
+  $('#screenRecipes').classList.add('hidden');
+  $('#screenArticle').classList.remove('hidden');
+  window.scrollTo(0, 0);
+  renderArticle();
+}
+function closeArticle(){
+  articleName = null;
+  $('#screenArticle').classList.add('hidden');
+  if(currentListId){ $('#screenDetail').classList.remove('hidden'); render(); }
+  else { showOverview(); }
+}
+
+function renderArticle(status){
+  if(!articleName) return;
+  const name = articleName;
+  const pkey = priceKey(name);
+  const a = articles[articleKey(name, articleListId)] || {};
+  const laden = (lists.find(l => l.id === articleListId) || {}).name || '';
+  const rec = recipes[recipeKey(name)] || null;
+  const img = a.image || null;
+  const vorderseite = (!img && rec && rec.imageFront && /^https:/.test(rec.imageFront)) ? rec.imageFront : null;
+  const p = prices[pkey];
+  const laeden = (p && p.stores) ? Object.entries(p.stores).sort((x, y) => String(y[1].datum || '').localeCompare(String(x[1].datum || ''))) : [];
+  const preiseHtml = laeden.length
+    ? laeden.map(([ladenName, e]) => `<div class="article-price-row"><span>${esc(ladenName)}</span><span>${fmtEuro(e.preis)}${e.datum ? ' · ' + esc(datumDE(e.datum)) : ''}</span></div>`).join('')
+    : `<div class="recipe-empty" style="margin:0;">Noch kein Preis eingetragen. Das geht über das 🧾 oben in der Liste.</div>`;
+
+  $('#articleTitle').textContent = baseName(name) || name;
+  $('#articleBody').innerHTML = `
+    ${status ? `<div class="recipe-status"><span class="recipe-spinner"></span>${esc(status)}</div>` : ''}
+    ${laden ? `<div class="receipt-meta" style="margin-bottom:10px;">Bild und Notiz gelten nur für ${esc(laden)}.</div>` : ''}
+    <div class="article-photo-box">
+      ${img ? `<img class="article-photo" src="${esc(img)}" data-zoom="${esc(img)}" alt="${esc(name)}">`
+            : `<div class="article-photo-empty"><div style="font-size:38px;">🖼️</div>Noch kein Bild</div>`}
+    </div>
+    <div class="recipe-actions" style="margin-top:10px;">
+      <button class="save" id="articleAddBtn">📷 ${img ? 'Bild ersetzen' : 'Bild hinzufügen'}</button>
+      ${img ? `<button class="delete" id="articleDelBtn">Bild löschen</button>` : ''}
+    </div>
+    ${vorderseite ? `<button class="recipe-capture small" id="articleTakeFront" style="background:transparent; color:var(--text); border:1px solid var(--line); margin-top:8px;">Vorderseite aus der Zubereitung übernehmen</button>` : ''}
+    <div class="receipt-section">Notiz</div>
+    <textarea class="recipe-text" id="articleNote" placeholder="z. B. die blaue Packung, nicht die Bio Variante">${esc(a.note || '')}</textarea>
+    <div class="recipe-actions"><button class="save" id="articleNoteSave">Notiz speichern</button></div>
+    <div class="receipt-section">Preise</div>
+    ${preiseHtml}
+    <div class="receipt-section">Mehr</div>
+    <button class="recipe-capture" id="articleRecipeBtn" style="background:transparent; color:var(--text); border:1px solid var(--line);">📖 Zubereitung ${rec ? 'ansehen' : 'hinterlegen'}</button>`;
+}
+
+// Ändert Bild oder Notiz eines Artikels und räumt leere Einträge auf
+function setArticle(key, patch){
+  const a = Object.assign({}, articles[key] || {}, patch, {updatedAt: Date.now()});
+  if(!a.image) delete a.image;
+  if(!a.note) delete a.note;
+  if(!a.image && !a.note) delete articles[key]; else articles[key] = a;
+  saveArticles();
+  render();
+}
+
+async function onArticlePhotoChosen(e){
+  const original = e.target.files && e.target.files[0];
+  e.target.value = '';
+  if(!original || !articleName) return;
+  const name = articleName;
+  const listeId = articleListId;
+  const ladenName = (lists.find(l => l.id === listeId) || {}).name || 'liste';
+  renderArticle('Bild wird gespeichert…');
+  let file = original;
+  try{ file = await komprimiereBild(original, 1400, 0.82); }
+  catch(err){ console.error('Komprimierung fehlgeschlagen, Original wird verwendet', err); }
+  try{
+    // gleicher Ordner wie bei den Zubereitungen, dort funktionieren Uploads nachweislich
+    const pfad = `essenapp/artikel/${slugify(ladenName)}-${slugify(baseName(name) || name)}-${Date.now()}.jpg`;
+    const ref = storage.ref().child(pfad);
+    await ref.put(file, {contentType: file.type || 'image/jpeg'});
+    const url = await ref.getDownloadURL();
+    setArticle(articleKey(name, listeId), {image: url});
+    if(articleName === name) renderArticle();
+    showToast('Bild gespeichert');
+  }catch(err){
+    console.error('Bild Upload fehlgeschlagen', err);
+    if(articleName === name){
+      renderArticle();
+      const el = document.createElement('div');
+      el.className = 'recipe-status';
+      el.style.color = 'var(--accent2)';
+      el.textContent = 'Bild konnte nicht gespeichert werden (' + (err.code || err.message || 'unbekannter Fehler') + ').';
+      $('#articleBody').prepend(el);
+    }
+  }
+}
+function loescheArtikelBild(){
+  if(!articleName) return;
+  if(!confirm('Das Bild dieses Artikels löschen?')) return;
+  setArticle(articleKey(articleName, articleListId), {image: undefined});
+  renderArticle();
+  showToast('Bild gelöscht');
+}
+function uebernehmeVorderseite(){
+  const rec = articleName ? recipes[recipeKey(articleName)] : null;
+  if(!rec || !rec.imageFront) return;
+  setArticle(articleKey(articleName, articleListId), {image: rec.imageFront});
+  renderArticle();
+  showToast('Vorderseite übernommen');
+}
+function speichereArtikelNotiz(){
+  if(!articleName) return;
+  const wert = ($('#articleNote').value || '').trim();
+  setArticle(articleKey(articleName, articleListId), {note: wert});
+  renderArticle();
+  showToast(wert ? 'Notiz gespeichert' : 'Notiz entfernt');
+}
+
+$('#articleBackBtn').addEventListener('click', closeArticle);
+$('#articleFileInput').addEventListener('change', onArticlePhotoChosen);
+$('#articleBody').addEventListener('click', e => {
+  const zoom = e.target.closest('[data-zoom]');
+  if(zoom){ oeffneLightbox(zoom.dataset.zoom); return; }
+  if(e.target.closest('#articleAddBtn')){ $('#articleFileInput').click(); return; }
+  if(e.target.closest('#articleDelBtn')){ loescheArtikelBild(); return; }
+  if(e.target.closest('#articleTakeFront')){ uebernehmeVorderseite(); return; }
+  if(e.target.closest('#articleNoteSave')){ speichereArtikelNotiz(); return; }
+  if(e.target.closest('#articleRecipeBtn')){ openRecipeModal(articleName); return; }
 });
 
 // ---------- Version und Aktualisieren ----------
@@ -1933,6 +2162,8 @@ function render(){
 }
 
 function rowHtml(it){
+  const art = articles[articleKey(it.n, it.listId)];
+  const artHtml = `<button class="art-btn ${art ? 'has-article' : ''}" data-article="${esc(it.n)}" title="Artikelseite">${art && art.image ? `<img src="${esc(art.image)}" alt="">` : '🖼️'}</button>`;
   const pi = priceInfo(it.n);
   const priceHtml = pi
     ? `<span class="price-line ${pi.exakt ? '' : 'other'}" data-price="${esc(it.n)}">${pi.exakt ? fmtEuro(pi.preis) : '≈ ' + fmtEuro(pi.preis) + (pi.laden ? ' (' + esc(pi.laden) + ')' : '')}</span>`
@@ -1943,6 +2174,7 @@ function rowHtml(it){
       <span class="icon">${it.i}</span>
       <div class="name-col"><span class="name" data-toggle="${it.id}"><span class="nt">${it.n}</span></span>${priceHtml}</div>
       <span class="qty ${it.qty>1?'multi':''}" data-qty="${it.id}">×${it.qty}</span>
+      ${artHtml}
       <button class="recipe-btn ${recipes[recipeKey(it.n)]?'has-recipe':''}" data-recipe="${it.n.replace(/"/g,'&quot;')}" title="Zubereitung">📖</button>
       <button class="move" data-move="${it.id}" title="Verschieben">⇄</button>
       <button class="remove" data-remove="${it.id}">×</button>
@@ -2014,6 +2246,8 @@ document.body.addEventListener('click', e => {
   const mvt = e.target.closest('[data-movetarget]');
   if(mvt){ moveItemToList(moveItemId, mvt.dataset.movetarget); closeMoveModal(); return; }
   if(e.target.id === 'moveCancel' || e.target.id === 'moveModal'){ closeMoveModal(); return; }
+  const ar = e.target.closest('[data-article]');
+  if(ar){ openArticle(ar.dataset.article); return; }
   const pr = e.target.closest('[data-price]');
   if(pr){ openPriceModal(pr.dataset.price); return; }
   const rc = e.target.closest('[data-recipe]');
@@ -2085,27 +2319,31 @@ document.addEventListener('touchstart', e => {
 
 document.addEventListener('touchmove', e => {
   if(!edgeSwipeActive || !currentListId) return;
+  const ziel = articleVisible() ? $('#screenArticle') : $('#screenDetail');
   const t = e.touches[0];
   const dx = Math.max(0, Math.min(t.clientX - swipeStartX, 90));
   const dy = Math.abs(t.clientY - swipeStartY);
   if(dy < 60){
-    $('#screenDetail').style.transform = `translateX(${dx}px)`;
-    $('#screenDetail').style.opacity = String(1 - dx/220);
+    ziel.style.transform = `translateX(${dx}px)`;
+    ziel.style.opacity = String(1 - dx/220);
   }
 }, {passive:true});
 
 document.addEventListener('touchend', e => {
   if(!edgeSwipeActive){ return; }
   edgeSwipeActive = false;
-  $('#screenDetail').style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-  $('#screenDetail').style.transform = '';
-  $('#screenDetail').style.opacity = '';
-  setTimeout(() => { $('#screenDetail').style.transition = ''; }, 220);
+  ['#screenDetail', '#screenArticle'].forEach(sel => {
+    const el = $(sel);
+    el.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+    el.style.transform = '';
+    el.style.opacity = '';
+    setTimeout(() => { el.style.transition = ''; }, 220);
+  });
   const t = e.changedTouches[0];
   const dx = t.clientX - swipeStartX;
   const dy = Math.abs(t.clientY - swipeStartY);
   if(dx > 70 && dy < 60 && currentListId){
-    showOverview();
+    if(articleVisible()) closeArticle(); else showOverview();
   }
 }, {passive:true});
 
