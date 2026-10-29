@@ -217,6 +217,7 @@
   .recipe-btn:active{background:var(--surface2);}
 
   .card{position:relative;}
+  .card .card-sub{display:block; font-family:'IBM Plex Mono', monospace; font-size:10.5px; color:var(--muted); margin-top:4px;}
   .card .recipe-badge{
     position:absolute; top:5px; right:5px; width:22px; height:22px; border-radius:50%;
     background:var(--surface2); border:1px solid var(--line); color:var(--muted);
@@ -581,7 +582,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <script>
 // Versionsnummer: bei jedem Update mit CACHE_NAME in sw.js (einkaufszettel-vNN) hochzählen
-const APP_VERSION = '26';
+const APP_VERSION = '27';
 
 const CATS = [
   {k:'obst', n:'Obst & Gemüse', i:'🍏'},
@@ -706,13 +707,33 @@ const customRef = db.collection('household').doc('shoppingapp:custom');
 const recipesRef = db.collection('household').doc('shoppingapp:recipes');
 const articlesRef = db.collection('household').doc('shoppingapp:articles');
 let articles = {}; // Schlüssel: Listen ID und Artikelname ohne Menge ("id::name"), Wert: {image, note, updatedAt}
-const geladen = {lists: false, items: false, articles: false};
+const geladen = {lists: false, items: false, articles: false, recipes: false};
 function articleKey(name, listId){ return `${listId}::${priceKey(name)}`; }
+
+// Einmalig: alte Zubereitungen (ohne Laden) werden den Listen zugeordnet, in denen der Artikel gerade steht.
+// Einträge ohne passenden Artikel auf einer Liste bleiben "ohne Laden" und lassen sich von Hand zuordnen.
+function migrateRecipes(){
+  const alt = Object.keys(recipes).filter(k => !k.includes('::'));
+  if(!alt.length) return;
+  let geaendert = false;
+  alt.forEach(k => {
+    const proListe = {};
+    items.forEach(i => { if(recipeKey(i.n) === k && !proListe[i.listId]) proListe[i.listId] = priceKey(i.n); });
+    const listen = Object.keys(proListe);
+    if(!listen.length) return;
+    listen.forEach(lid => {
+      const nk = `${lid}::${proListe[lid]}`;
+      if(!recipes[nk]) recipes[nk] = JSON.parse(JSON.stringify(recipes[k]));
+    });
+    delete recipes[k];
+    geaendert = true;
+  });
+  if(geaendert){ saveRecipes(); if(currentListId) render(); }
+}
 
 // Einmalig: Bilder und Notizen der ersten Version (ohne Zuordnung zu einem Laden) werden den Listen
 // zugeordnet, in denen der Artikel gerade steht. Danach gelten sie nur noch dort.
-function maybeMigrateArticles(){
-  if(!(geladen.lists && geladen.items && geladen.articles)) return;
+function migrateArticleKeys(){
   const alt = Object.keys(articles).filter(k => !k.includes('::'));
   if(!alt.length) return;
   let geaendert = false;
@@ -728,9 +749,36 @@ function maybeMigrateArticles(){
   });
   if(geaendert){ saveArticles(); if(currentListId) render(); }
 }
+
+// Läuft genau einmal, sobald Listen, Artikel, Bilder und Zubereitungen beim Start geladen sind.
+// Später hinzugefügte Artikel werden nie automatisch einem Laden zugeordnet.
+let migrationFertig = false;
+function maybeMigrateArticles(){
+  if(migrationFertig) return;
+  if(!(geladen.lists && geladen.items && geladen.articles && geladen.recipes)) return;
+  migrationFertig = true;
+  migrateRecipes();
+  migrateArticleKeys();
+}
 const storage = firebase.storage();
-let recipes = {}; // Schlüssel: Artikelname klein geschrieben, Wert: {image, text, updatedAt}
+let recipes = {}; // Schlüssel: Listen ID und Artikelname ("id::name"), alte Einträge nur Artikelname. Wert: {imageFront, imageBack, imageContent, text, updatedAt}
 function recipeKey(name){ return name.trim().toLowerCase(); }
+function listNameById(id){ return (lists.find(l => l.id === id) || {}).name || ''; }
+// Schlüssel einer Zubereitung für einen Laden (Liste). Ohne Liste: alter Schlüssel ohne Laden
+function recipeScopedKey(name, listId){ return listId ? articleKey(name, listId) : recipeKey(name); }
+// Zubereitung zum Anzeigen: eigener Eintrag des Ladens, sonst ein alter Eintrag ohne Laden
+function recipeFor(name, listId){
+  return (listId && recipes[articleKey(name, listId)]) || recipes[recipeKey(name)] || null;
+}
+// Schlüssel, unter dem das Fenster liest und schreibt: Eintrag des Ladens, sonst ein noch
+// nicht zugeordneter alter Eintrag, sonst ein neuer Eintrag für den Laden
+function recipeEditKey(name, listId){
+  if(!listId) return recipeKey(name);
+  const neu = articleKey(name, listId);
+  if(recipes[neu]) return neu;
+  if(recipes[recipeKey(name)]) return recipeKey(name);
+  return neu;
+}
 const pricesRef = db.collection('household').doc('shoppingapp:prices');
 let prices = {}; // Schlüssel: Artikelname klein, Wert: {preis, laden, datum, stores:{Laden:{preis,datum}}}
 function slugify(name){
@@ -792,6 +840,7 @@ async function loadAll(){
   recipesRef.onSnapshot(snap => {
     const raw = snap.exists ? snap.data().value : {};
     recipes = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : (typeof raw === 'string' ? (JSON.parse(raw||'{}')) : {});
+    geladen.recipes = true; maybeMigrateArticles();
     if(isTyping()) return;
     if(currentListId) render();
     if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
@@ -835,27 +884,35 @@ function showRecipesOverview(){
   renderRecipesOverview();
 }
 function renderRecipesOverview(){
-  const keys = Object.keys(recipes).sort((a,b)=>a.localeCompare(b, 'de'));
+  const eintraege = Object.keys(recipes).map(key => {
+    const r = recipes[key];
+    const scoped = key.includes('::');
+    const listId = scoped ? key.split('::')[0] : '';
+    const suffix = scoped ? key.slice(listId.length + 2) : key;
+    const treffer = allDbItems().find(it => priceKey(it.n) === suffix);
+    const posten = items.find(i => priceKey(i.n) === suffix);
+    const label = treffer ? treffer.n : (posten ? baseName(posten.n) : suffix);
+    const laden = scoped ? listNameById(listId) : 'ohne Laden';
+    return {r, listId, label, laden, treffer};
+  }).sort((a, b) => a.label.localeCompare(b.label, 'de') || a.laden.localeCompare(b.laden, 'de'));
   const grid = $('#recipesGrid');
   const empty = $('#recipesEmpty');
-  if(keys.length === 0){
+  if(eintraege.length === 0){
     grid.innerHTML = '';
     empty.style.display = 'block';
     return;
   }
   empty.style.display = 'none';
-  grid.innerHTML = keys.map(key => {
-    const r = recipes[key];
-    const dbMatch = allDbItems().find(it => recipeKey(it.n) === key);
-    const label = dbMatch ? dbMatch.n : key;
-    const thumb = r.imageFront || r.image || r.imageBack || r.imageContent || null;
+  grid.innerHTML = eintraege.map(e => {
+    const thumb = e.r.imageFront || e.r.image || e.r.imageBack || e.r.imageContent || null;
     const iconOrPhoto = thumb
-      ? `<img src="${thumb}" alt="${label}" style="width:40px;height:40px;object-fit:cover;border-radius:10px;margin-bottom:6px;">`
-      : `<span class="icon">${dbMatch ? dbMatch.i : '📖'}</span>`;
+      ? `<img src="${esc(thumb)}" alt="${esc(e.label)}" style="width:40px;height:40px;object-fit:cover;border-radius:10px;margin-bottom:6px;">`
+      : `<span class="icon">${e.treffer ? e.treffer.i : '📖'}</span>`;
     return `
-    <div class="card" data-recipe="${label.replace(/"/g,'&quot;')}">
+    <div class="card" data-recipe="${esc(e.label)}" data-list="${esc(e.listId)}">
       ${iconOrPhoto}
-      <span class="name">${label}</span>
+      <span class="name">${esc(e.label)}</span>
+      <span class="card-sub">${esc(e.laden)}</span>
     </div>`;
   }).join('');
 }
@@ -887,9 +944,12 @@ async function deleteList(id){
   items = items.filter(x=>x.listId!==id);
   const betroffen = Object.keys(articles).filter(k => k.startsWith(id + '::'));
   betroffen.forEach(k => delete articles[k]);
+  const betroffeneRezepte = Object.keys(recipes).filter(k => k.startsWith(id + '::'));
+  betroffeneRezepte.forEach(k => delete recipes[k]);
   await saveLists();
   await saveItems();
   if(betroffen.length) await saveArticles();
+  if(betroffeneRezepte.length) await saveRecipes();
   renderOverview();
 }
 function moveListUp(id){
@@ -963,33 +1023,40 @@ function moveItemToList(itemId, targetListId){
   if(!it) return;
   // Bild und Notiz in die Zielliste mitnehmen, falls dort noch keine eigenen stehen (in der alten Liste bleiben sie)
   const von = articleKey(it.n, it.listId), nach = articleKey(it.n, targetListId);
-  let kopiert = false;
+  let kopiert = false, rezeptKopiert = false;
   if(articles[von] && !articles[nach]){ articles[nach] = JSON.parse(JSON.stringify(articles[von])); kopiert = true; }
+  if(recipes[von] && !recipes[nach]){ recipes[nach] = JSON.parse(JSON.stringify(recipes[von])); rezeptKopiert = true; }
   it.listId = targetListId;
   it.checked = false;
   saveItems();
   if(kopiert) saveArticles();
+  if(rezeptKopiert) saveRecipes();
   render();
 }
 
 // ---------- Zubereitung: Foto + automatische Texterkennung, hängt am Produktnamen ----------
 let recipeItemName = null;
+let recipeListId = null; // Liste (Laden), zu der die Zubereitung im geöffneten Fenster gehört
 
-function openRecipeModal(name){
+function openRecipeModal(name, listId){
   recipeItemName = name;
+  recipeListId = (listId === undefined) ? currentListId : (listId || null);
   $('#recipeTitle').textContent = name;
   renderRecipeBody();
   $('#recipeModal').classList.remove('hidden');
 }
 function closeRecipeModal(){
   recipeItemName = null;
+  recipeListId = null;
   $('#recipeModal').classList.add('hidden');
 }
 
 function renderRecipeBody(recognizing){
   const box = $('#recipeBody');
-  const key = recipeKey(recipeItemName);
+  const key = recipeEditKey(recipeItemName, recipeListId);
   const r = recipes[key] || {};
+  const laden = listNameById(recipeListId);
+  const alterEintrag = !!recipes[recipeKey(recipeItemName)] && key === recipeKey(recipeItemName);
   const frontImg = r.imageFront || null;
   const backImg = r.imageBack || r.image || null; // ältere Einträge hatten nur ein Foto, das zählt als Rückseite
   const contentImg = r.imageContent || null;
@@ -1010,7 +1077,13 @@ function renderRecipeBody(recognizing){
       ${slotHtml('Inhalt', contentImg, 'recipeContentInput', 'recipeContentBtn', 'Inhalt')}
     </div>`;
 
+  const ladenHinweis = alterEintrag
+    ? (recipeListId
+        ? `<div class="recipe-empty" style="margin-bottom:10px;">Diese Zubereitung gehört noch zu keinem Laden und erscheint deshalb in jeder Liste.<br><button class="recipe-capture small" id="recipeAssignBtn" style="margin-top:8px;">Zu ${esc(laden)} zuordnen</button></div>`
+        : `<div class="recipe-empty" style="margin-bottom:10px;">Diese Zubereitung gehört noch zu keinem Laden. Öffne sie in der Liste des Ladens und ordne sie dort zu.</div>`)
+    : (laden ? `<div class="receipt-meta" style="margin-bottom:10px;">Zubereitung gilt nur für ${esc(laden)}.</div>` : '');
   box.innerHTML = `
+    ${ladenHinweis}
     ${!hasAny ? `<div class="recipe-empty">Noch kein Foto hinterlegt. Vorderseite zur Wiedererkennung, Rückseite für die automatische Zubereitung Erkennung, Inhalt für Zutaten und Nährwerte. Am besten gerade, nah und gut beleuchtet fotografieren. Tippe ein Foto an, um es groß zu sehen.</div>` : ''}
     ${photosHtml}
     ${recognizing ? `<div class="recipe-status"><span class="recipe-spinner"></span>Zubereitung wird gelesen…</div>` : ''}
@@ -1030,9 +1103,21 @@ function renderRecipeBody(recognizing){
 
   const rerunBtn = $('#recipeRerunBtn');
   if(rerunBtn) rerunBtn.addEventListener('click', rerunRecipeRecognition);
+  const assignBtn = $('#recipeAssignBtn');
+  if(assignBtn) assignBtn.addEventListener('click', () => {
+    const alt = recipeKey(recipeItemName), neu = recipeScopedKey(recipeItemName, recipeListId);
+    if(!recipeListId || !recipes[alt]) return;
+    if(recipes[neu]){ showToast('Für diesen Laden gibt es schon eine eigene Zubereitung.'); return; }
+    recipes[neu] = recipes[alt];
+    delete recipes[alt];
+    saveRecipes(); render();
+    if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
+    renderRecipeBody();
+    showToast('Zubereitung zugeordnet');
+  });
 
   $('#recipeSaveBtn').addEventListener('click', () => {
-    const key2 = recipeKey(recipeItemName);
+    const key2 = recipeEditKey(recipeItemName, recipeListId);
     recipes[key2] = recipes[key2] || {};
     recipes[key2].text = $('#recipeTextArea').value;
     recipes[key2].updatedAt = Date.now();
@@ -1041,7 +1126,7 @@ function renderRecipeBody(recognizing){
     closeRecipeModal();
   });
   $('#recipeDeleteBtn').addEventListener('click', () => {
-    const key2 = recipeKey(recipeItemName);
+    const key2 = recipeEditKey(recipeItemName, recipeListId);
     delete recipes[key2];
     saveRecipes(); render(); renderRecipeBody();
     if(!$('#screenRecipes').classList.contains('hidden')) renderRecipesOverview();
@@ -1100,7 +1185,8 @@ function zeigeRezeptHinweis(text, fehler){
 async function rerunRecipeRecognition(){
   const name = recipeItemName;
   if(!name) return;
-  const key = recipeKey(name);
+  const lid = recipeListId;
+  const key = recipeEditKey(name, lid);
   const r = recipes[key] || {};
   const urls = [r.imageBack || r.image, r.imageFront].filter(u => u && /^https:/.test(u));
   if(!urls.length) return;
@@ -1117,7 +1203,7 @@ async function rerunRecipeRecognition(){
     saveRecipes();
     render();
   }
-  if(recipeItemName !== name) return; // Fenster wurde inzwischen geschlossen oder gewechselt
+  if(recipeItemName !== name || recipeListId !== lid) return; // Fenster wurde inzwischen geschlossen oder gewechselt
   renderRecipeBody();
   if(text) zeigeRezeptHinweis('Text neu erkannt, bitte kurz prüfen.', false);
   else if(fehler) zeigeRezeptHinweis(`Erkennung fehlgeschlagen (${fehler.message}).`, true);
@@ -1179,7 +1265,8 @@ function komprimiereBild(datei, maxBreite = 2000, qualitaet = 0.85){
 async function onRecipePhotoChosen(e, slot){
   const original = e.target.files && e.target.files[0];
   if(!original) return;
-  const key = recipeKey(recipeItemName);
+  const key = recipeEditKey(recipeItemName, recipeListId);
+  const ladenSlug = recipeListId ? slugify(listNameById(recipeListId)) + '-' : '';
   const field = slot === 'front' ? 'imageFront' : (slot === 'content' ? 'imageContent' : 'imageBack');
   recipes[key] = recipes[key] || {};
   const vorherigerWert = recipes[key][field] || null; // falls Upload fehlschlägt, wird darauf zurückgesetzt
@@ -1221,7 +1308,7 @@ async function onRecipePhotoChosen(e, slot){
   let uploadFehler = null;
   try{
     // gleicher Ordner wie bei "Was essen wir heute", dort funktionieren Uploads nachweislich
-    const path = `essenapp/zubereitung/${slugify(recipeItemName)}-${slot}-${Date.now()}.jpg`;
+    const path = `essenapp/zubereitung/${ladenSlug}${slugify(recipeItemName)}-${slot}-${Date.now()}.jpg`;
     const ref = storage.ref().child(path);
     await ref.put(file, { contentType: file.type || 'image/jpeg' });
     const url = await ref.getDownloadURL();
@@ -1825,6 +1912,11 @@ function renameCustomItem(alt, neuRoh){
       const nk = k.slice(0, k.length - pAlt.length) + pNeu;
       if(!articles[nk]){ articles[nk] = articles[k]; delete articles[k]; artikelBilder = true; }
     });
+    Object.keys(recipes).forEach(k => {
+      if(!k.includes('::') || !k.endsWith('::' + pAlt)) return;
+      const nk = k.slice(0, k.length - pAlt.length) + pNeu;
+      if(!recipes[nk]){ recipes[nk] = recipes[k]; delete recipes[k]; rezepte = true; }
+    });
   }
 
   it.n = neu;
@@ -1911,7 +2003,7 @@ function renderArticle(status){
   const pkey = priceKey(name);
   const a = articles[articleKey(name, articleListId)] || {};
   const laden = (lists.find(l => l.id === articleListId) || {}).name || '';
-  const rec = recipes[recipeKey(name)] || null;
+  const rec = recipeFor(name, articleListId);
   const img = a.image || null;
   const vorderseite = (!img && rec && rec.imageFront && /^https:/.test(rec.imageFront)) ? rec.imageFront : null;
   const p = prices[pkey];
@@ -1992,7 +2084,7 @@ function loescheArtikelBild(){
   showToast('Bild gelöscht');
 }
 function uebernehmeVorderseite(){
-  const rec = articleName ? recipes[recipeKey(articleName)] : null;
+  const rec = articleName ? recipeFor(articleName, articleListId) : null;
   if(!rec || !rec.imageFront) return;
   setArticle(articleKey(articleName, articleListId), {image: rec.imageFront});
   renderArticle();
@@ -2015,7 +2107,7 @@ $('#articleBody').addEventListener('click', e => {
   if(e.target.closest('#articleDelBtn')){ loescheArtikelBild(); return; }
   if(e.target.closest('#articleTakeFront')){ uebernehmeVorderseite(); return; }
   if(e.target.closest('#articleNoteSave')){ speichereArtikelNotiz(); return; }
-  if(e.target.closest('#articleRecipeBtn')){ openRecipeModal(articleName); return; }
+  if(e.target.closest('#articleRecipeBtn')){ openRecipeModal(articleName, articleListId); return; }
 });
 
 // ---------- Version und Aktualisieren ----------
@@ -2175,7 +2267,7 @@ function rowHtml(it){
       <div class="name-col"><span class="name" data-toggle="${it.id}"><span class="nt">${it.n}</span></span>${priceHtml}</div>
       <span class="qty ${it.qty>1?'multi':''}" data-qty="${it.id}">×${it.qty}</span>
       ${artHtml}
-      <button class="recipe-btn ${recipes[recipeKey(it.n)]?'has-recipe':''}" data-recipe="${it.n.replace(/"/g,'&quot;')}" title="Zubereitung">📖</button>
+      <button class="recipe-btn ${recipeFor(it.n, it.listId)?'has-recipe':''}" data-recipe="${it.n.replace(/"/g,'&quot;')}" title="Zubereitung">📖</button>
       <button class="move" data-move="${it.id}" title="Verschieben">⇄</button>
       <button class="remove" data-remove="${it.id}">×</button>
     </li>`;
@@ -2195,7 +2287,7 @@ function renderGrid(){
   const inListNames = new Set(currentItems().filter(x=>!x.checked).map(x=>x.n.toLowerCase()));
   grid.innerHTML = dbItems.map(it => `
     <div class="card ${inListNames.has(it.n.toLowerCase())?'in-list':''}" data-add="${it.n.replace(/"/g,'&quot;')}" data-c="${it.c}" data-i="${it.i}">
-      <span class="recipe-badge ${recipes[recipeKey(it.n)]?'has-recipe':''}" data-recipe="${it.n.replace(/"/g,'&quot;')}" title="Zubereitung">📖</span>
+      <span class="recipe-badge ${recipeFor(it.n, currentListId)?'has-recipe':''}" data-recipe="${it.n.replace(/"/g,'&quot;')}" title="Zubereitung">📖</span>
       <span class="icon">${it.i}</span><span class="name">${it.n}</span>
     </div>`).join('');
 }
@@ -2251,7 +2343,7 @@ document.body.addEventListener('click', e => {
   const pr = e.target.closest('[data-price]');
   if(pr){ openPriceModal(pr.dataset.price); return; }
   const rc = e.target.closest('[data-recipe]');
-  if(rc){ openRecipeModal(rc.dataset.recipe); return; }
+  if(rc){ openRecipeModal(rc.dataset.recipe, rc.dataset.list); return; }
   if(e.target.id === 'recipeCancel' || e.target.id === 'recipeModal'){ closeRecipeModal(); return; }
   const card = e.target.closest('.card[data-add]');
   if(card){ addToList(card.dataset.add, card.dataset.c, card.dataset.i); return; }
