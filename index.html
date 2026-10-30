@@ -480,6 +480,7 @@
       <h1 id="detailTitle" style="font-size:22px; flex:1;">Liste</h1>
       <span class="syncstatus" id="syncStatus2"><span class="pulse"></span>offline</span>
       <div class="count" id="openCount">0 offen</div>
+      <button class="backbtn" id="flyerBtn" title="Prospekt">📰</button>
       <button class="backbtn" id="receiptBtn" title="Preise">🧾</button>
       <input type="file" accept="image/*" multiple id="receiptInput" style="display:none;">
     </div>
@@ -528,6 +529,27 @@
     <input type="text" class="receipt-name" id="customSearch" placeholder="Eigene Artikel suchen…" autocomplete="off" style="margin-bottom:6px;">
     <div id="customBody"></div>
     <button class="modal-cancel" id="customCancel">Schließen</button>
+  </div>
+</div>
+
+<div class="modal-overlay hidden" id="flyerModal">
+  <div class="modal-sheet tall">
+    <div class="modal-title" id="flyerTitle">Prospekt</div>
+    <button class="recipe-capture" id="flyerOpenBtn">📰 Aktuelles Prospekt öffnen</button>
+    <div class="recipe-empty" id="flyerInfo" style="margin-bottom:6px;"></div>
+    <div class="receipt-section">Eigener Link</div>
+    <input type="text" inputmode="url" autocapitalize="off" autocorrect="off" spellcheck="false" class="receipt-name" id="flyerUrlInput" placeholder="https://…">
+    <div class="recipe-actions" style="margin-top:8px;">
+      <button class="save" id="flyerUrlSave">Link speichern</button>
+      <button id="flyerUrlClear">Entfernen</button>
+    </div>
+    <div class="receipt-section">Ort für die Suche</div>
+    <input type="text" autocapitalize="words" class="receipt-name" id="flyerOrtInput" placeholder="Ort oder Postleitzahl">
+    <div class="recipe-actions" style="margin-top:8px;">
+      <button class="save" id="flyerOrtSave">Ort speichern</button>
+    </div>
+    <div class="recipe-empty" style="margin-top:14px;">Für ein festes Ziel: Öffne das Prospekt deines Marktes einmal im Browser, kopiere die Adresse und füge sie oben bei „Eigener Link" ein. Die Seiten der Läden zeigen von selbst immer die aktuelle Woche. Der Ort gilt für alle Listen.</div>
+    <button class="modal-cancel" id="flyerCancel">Schließen</button>
   </div>
 </div>
 
@@ -582,7 +604,7 @@
 <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 <script>
 // Versionsnummer: bei jedem Update mit CACHE_NAME in sw.js (einkaufszettel-vNN) hochzählen
-const APP_VERSION = '27';
+const APP_VERSION = '28';
 
 const CATS = [
   {k:'obst', n:'Obst & Gemüse', i:'🍏'},
@@ -780,6 +802,8 @@ function recipeEditKey(name, listId){
   return neu;
 }
 const pricesRef = db.collection('household').doc('shoppingapp:prices');
+const settingsRef = db.collection('household').doc('shoppingapp:settings');
+let settings = {}; // gemeinsame Einstellungen, z. B. {ort: 'Ort oder Postleitzahl für die Prospekt Suche'}
 let prices = {}; // Schlüssel: Artikelname klein, Wert: {preis, laden, datum, stores:{Laden:{preis,datum}}}
 function slugify(name){
   return name.toLowerCase()
@@ -807,6 +831,7 @@ async function saveCustom(){ try{ await customRef.set({value:custom}); }catch(e)
 async function saveRecipes(){ try{ await recipesRef.set({value:recipes}); }catch(e){} }
 async function saveArticles(){ try{ await articlesRef.set({value:articles}); }catch(e){} }
 async function savePrices(){ try{ await pricesRef.set({value:prices}); }catch(e){} }
+async function saveSettings(){ try{ await settingsRef.set({value:settings}); }catch(e){} }
 
 async function loadAll(){
   try{
@@ -853,6 +878,10 @@ async function loadAll(){
     if(currentListId) render();
     const tippt = document.activeElement && document.activeElement.id === 'articleNote';
     if(articleName && !tippt && !$('#screenArticle').classList.contains('hidden')) renderArticle();
+  });
+  settingsRef.onSnapshot(snap => {
+    const raw = snap.exists ? snap.data().value : {};
+    settings = (raw && typeof raw === 'object' && !Array.isArray(raw)) ? raw : (typeof raw === 'string' ? (JSON.parse(raw||'{}')) : {});
   });
   pricesRef.onSnapshot(snap => {
     const raw = snap.exists ? snap.data().value : {};
@@ -2109,6 +2138,109 @@ $('#articleBody').addEventListener('click', e => {
   if(e.target.closest('#articleNoteSave')){ speichereArtikelNotiz(); return; }
   if(e.target.closest('#articleRecipeBtn')){ openRecipeModal(articleName, articleListId); return; }
 });
+
+// ---------- Prospekt: Link pro Laden ----------
+// Öffnet eine Adresse außerhalb der App (in der installierten App als Browser Fenster mit "Fertig")
+function openExternal(url){
+  const a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener noreferrer';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+// Prüft eine eingefügte Adresse: ergänzt https, erlaubt nur http und https
+function normalisiereUrl(roh){
+  let t = String(roh || '').trim();
+  if(!t) return null;
+  if(!/^[a-z][a-z0-9+.\-]*:/i.test(t)) t = 'https://' + t;
+  try{
+    const u = new URL(t);
+    if(u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if(!u.hostname.includes('.')) return null;
+    return u.href;
+  }catch(e){ return null; }
+}
+function prospektSuche(ladenName){
+  const q = `${ladenName} Prospekt aktuell` + (settings.ort ? ' ' + settings.ort : '');
+  return 'https://www.google.com/search?q=' + encodeURIComponent(q);
+}
+function prospektZiel(liste){
+  return (liste && liste.prospektUrl) ? liste.prospektUrl : prospektSuche(liste ? liste.name : '');
+}
+function aktuelleListe(){ return lists.find(l => l.id === currentListId) || null; }
+
+function renderFlyerInfo(){
+  const l = aktuelleListe();
+  if(!l) return;
+  $('#flyerTitle').textContent = 'Prospekt · ' + l.name;
+  if(l.prospektUrl){
+    let host = l.prospektUrl;
+    try{ host = new URL(l.prospektUrl).hostname.replace(/^www\./, ''); }catch(e){}
+    $('#flyerInfo').textContent = `Öffnet deinen gespeicherten Link (${host}).`;
+  }else{
+    $('#flyerInfo').textContent = settings.ort
+      ? `Öffnet eine Suche nach „${l.name} Prospekt aktuell ${settings.ort}".`
+      : `Öffnet eine Suche nach „${l.name} Prospekt aktuell". Trage unten deinen Ort ein, damit das Prospekt deines Marktes gefunden wird.`;
+  }
+}
+function openFlyerModal(){
+  const l = aktuelleListe();
+  if(!l) return;
+  $('#flyerUrlInput').value = l.prospektUrl || '';
+  $('#flyerOrtInput').value = settings.ort || '';
+  $('#flyerUrlInput').style.borderColor = '';
+  renderFlyerInfo();
+  $('#flyerModal').classList.remove('hidden');
+}
+function closeFlyerModal(){ $('#flyerModal').classList.add('hidden'); }
+function oeffneProspekt(){
+  const l = aktuelleListe();
+  if(l) openExternal(prospektZiel(l));
+}
+function speichereProspektLink(){
+  const l = aktuelleListe();
+  if(!l) return;
+  const url = normalisiereUrl($('#flyerUrlInput').value);
+  if(!url){
+    $('#flyerUrlInput').style.borderColor = 'var(--accent2)';
+    showToast('Das ist keine gültige Internetadresse.');
+    return;
+  }
+  l.prospektUrl = url;
+  $('#flyerUrlInput').value = url;
+  $('#flyerUrlInput').style.borderColor = '';
+  saveLists();
+  renderFlyerInfo();
+  showToast('Link gespeichert');
+}
+function entferneProspektLink(){
+  const l = aktuelleListe();
+  if(!l) return;
+  delete l.prospektUrl;
+  $('#flyerUrlInput').value = '';
+  saveLists();
+  renderFlyerInfo();
+  showToast('Link entfernt');
+}
+function speichereProspektOrt(){
+  const ort = $('#flyerOrtInput').value.replace(/\s+/g, ' ').trim();
+  if(ort) settings.ort = ort; else delete settings.ort;
+  saveSettings();
+  renderFlyerInfo();
+  showToast(ort ? 'Ort gespeichert' : 'Ort entfernt');
+}
+
+$('#flyerBtn').addEventListener('click', openFlyerModal);
+$('#flyerCancel').addEventListener('click', closeFlyerModal);
+$('#flyerModal').addEventListener('click', e => { if(e.target.id === 'flyerModal') closeFlyerModal(); });
+$('#flyerOpenBtn').addEventListener('click', oeffneProspekt);
+$('#flyerUrlSave').addEventListener('click', speichereProspektLink);
+$('#flyerUrlClear').addEventListener('click', entferneProspektLink);
+$('#flyerOrtSave').addEventListener('click', speichereProspektOrt);
+$('#flyerUrlInput').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); speichereProspektLink(); } });
+$('#flyerOrtInput').addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); speichereProspektOrt(); } });
 
 // ---------- Version und Aktualisieren ----------
 document.querySelectorAll('[data-version]').forEach(el => {
